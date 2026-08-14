@@ -88,10 +88,10 @@ def Pizza_Palace():
 def Wok_Spices():
     print("----------------------------------------------------------------------------------------------------------")
     print("Here is the restaurant's menu:")
-    menu={"1.Veg Hakka Noodles — ₹129",
-           "2.Schezwan Fried Rice — ₹139",
-            "3.Chilli Paneer — ₹169"
-}
+    menu={1: "Veg Hakka Noodles — ₹129",
+           2: "Schezwan Fried Rice — ₹139",
+           3: "Chilli Paneer — ₹169"
+    }
     
     print("----------------------------------------------------------------------------------------------------------")
     print("do you want to order?:")
@@ -119,9 +119,9 @@ def Wok_Spices():
 def Spice_Hub():
     print("----------------------------------------------------------------------------------------------------------")
     print("Here is the restaurant's menu:")
-    menu={ "1.Paneer Butter Masala — ₹179",
-            "2.Veg Biryani — ₹159",
-             "3.Masala Dosa — ₹99",
+    menu={1: "Paneer Butter Masala — ₹179",
+           2: "Veg Biryani — ₹159",
+           3: "Masala Dosa — ₹99"
     }
     print("----------------------------------------------------------------------------------------------------------")
     print("do you want to order?:")
@@ -149,9 +149,9 @@ def Spice_Hub():
 def Burger_Point():
     print("----------------------------------------------------------------------------------------------------------")
     print("Here is the restaurant's menu:")
-    menu={"1.Classic Veg Burger — ₹99",
-          "2.Paneer Crunch Burger — ₹139",
-          "3.Double Cheese Burger — ₹159"
+    menu={1: "Classic Veg Burger — ₹99",
+          2: "Paneer Crunch Burger — ₹139",
+          3: "Double Cheese Burger — ₹159"
     }
     print("----------------------------------------------------------------------------------------------------------")
     print("do you want to order?:")

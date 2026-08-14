@@ -14,17 +14,6 @@ def browse_food():
     else:
         print(f"Sorry, {order} is not available.")
 
-def search_food():
-    pass
-
-def Wok_Spices():
-     pass
-
-def Spice_Hub():
-     pass
-
-def Burger_Point():
-     pass 
 
 def restaurants():
     print('''1. 🍕 Pizza Palace
@@ -249,16 +238,12 @@ def favorites():
     pass
 
 
-def offers():
-    pass
 
 
 def wallet():
     pass
 
 
-def food_points():
-    pass
 
 
 def reviews():
@@ -274,9 +259,6 @@ def reviews():
             print("Invalid input. Please type 'yes' or 'no'.")
 
 
-def notifications():
-    pass
-
 
 def profile():
     pass
@@ -288,6 +270,7 @@ def logout():
 
 
 def main_lobby():
+# profile will contain 1.my order 2. ❤️ Favorites 8. ⭐ Reviews 5. 📅 My Reservations wallet
     print("""
 ════════════════════════════════════
 👤 USER PORTAL
@@ -296,20 +279,11 @@ def main_lobby():
 Welcome user!
 
 1. 🍔 Browse Food
-2. 🔎 Search Food
-3. 🏪 Restaurants
-4. 🛒 Cart
-5. 🪑 Available Seats
-6. 📅 My Reservations
-7. 📦 My Orders
-8. ❤️ Favorites
-9. 🎟️ Offers
-10. 💰 Wallet
-11. 🏆 Food Points
-12. ⭐ Reviews
-13. 🔔 Notifications
-14. 👤 Profile
-15. 🚪 Logout
+2. 🏪 Restaurants
+3. 🛒 Cart
+4. 🪑 Available Seats
+5. 👤 Profile 
+6. 🚪 Logout
 """)
 
     while True:
@@ -320,50 +294,24 @@ Welcome user!
             browse_food()
 
         elif choice == 2:
-            search_food()
-
-        elif choice == 3:
             restaurants()
 
-        elif choice == 4:
+        elif choice == 3:
             cart()
 
-        elif choice == 5:
+        elif choice == 4:
             available_seats()
 
-        elif choice == 6:
-            my_reservations()
-
-        elif choice == 7:
-            my_orders()
-
-        elif choice == 8:
-            favorites()
-
-        elif choice == 9:
-            offers()
-
-        elif choice == 10:
-            wallet()
-
-        elif choice == 11:
-            food_points()
-
-        elif choice == 12:
-            reviews()
-
-        elif choice == 13:
-            notifications()
-
-        elif choice == 14:
+        elif choice == 5 :
             profile()
 
-        elif choice == 15:
+        elif choice == 6:
             logout()
             break
 
 
 #main maal
+
 while True:
 
     print("welocome to alakh da dhaaba")

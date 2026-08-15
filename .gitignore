@@ -223,4 +223,9 @@ learning.txt
 testing.py
 
 #old file
-old.py
+old.txt
+
+backups/
+
+log.json
+alakh_dhaaba_data.json

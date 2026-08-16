@@ -217,15 +217,30 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-#learning stuff from code
 
+# Learning/Personal files
 learning.txt
 testing.py
-
-#old file
 old.txt
+notes.md
 
+# Generated files
+receipts/
 backups/
-
+*.log
 log.json
+
+# Data files (uncomment if you want fresh start for everyone)
+data/
 alakh_dhaaba_data.json
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+tempCodeRunnerFile.py
+
+login.py

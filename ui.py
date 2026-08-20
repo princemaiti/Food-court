@@ -3,7 +3,9 @@ UI helpers for Alakh Da Dhaaba
 """
 
 import os
+import re
 import shutil
+import unicodedata
 from typing import List, Tuple
 
 class Colors:
@@ -27,6 +29,16 @@ if os.name == "nt":
     os.system("")
 
 C = Colors()
+
+def _visible_length(text: str) -> int:
+    """Return terminal display width without ANSI color sequences"""
+    plain_text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    width = 0
+    for character in plain_text:
+        if unicodedata.combining(character):
+            continue
+        width += 2 if unicodedata.east_asian_width(character) in {"W", "F"} else 1
+    return width
 
 def get_width() -> int:
     """Get terminal width, capped for readability"""
@@ -56,7 +68,8 @@ def header(title: str, emoji: str = ""):
     w = get_width()
     label = f" {emoji}  {title} " if emoji else f" {title} "
     print(f"{C.CYAN}{'═' * w}{C.RESET}")
-    print(f"{C.BOLD}{C.WHITE}{label.center(w)}{C.RESET}")
+    padding = max((w - _visible_length(label)) // 2, 0)
+    print(f"{C.BOLD}{C.WHITE}{' ' * padding}{label}{C.RESET}")
     print(f"{C.CYAN}{'═' * w}{C.RESET}")
 
 def sub_header(title: str, emoji: str = ""):
@@ -64,7 +77,7 @@ def sub_header(title: str, emoji: str = ""):
     w = get_width()
     label = f"{emoji}  {title}" if emoji else title
     print(f"{C.MAGENTA}{label}{C.RESET}")
-    print(f"{C.GREY}{'─' * min(len(label) + 4, w)}{C.RESET}")
+    print(f"{C.GREY}{'─' * min(_visible_length(label) + 4, w)}{C.RESET}")
 
 def success(msg: str):
     """Print success message"""
@@ -96,9 +109,66 @@ def menu_box(options: List[Tuple[str, str]]):
     print(f"{C.CYAN}┌{'─' * (w - 2)}┐{C.RESET}")
     for number, label in options:
         text = f" {C.YELLOW}{number}.{C.RESET} {label}"
-        pad = w - 2 - len(f" {number}. {label}")
+        pad = w - 2 - _visible_length(f" {number}. {label}")
         print(f"{C.CYAN}│{C.RESET}{text}{' ' * max(pad, 0)}{C.CYAN}│{C.RESET}")
     print(f"{C.CYAN}└{'─' * (w - 2)}┘{C.RESET}")
+
+def panel(title: str, rows: List[str], color: str = C.CYAN):
+    """Print a bordered information panel"""
+    width = get_width()
+    inner_width = width - 4
+    print(f"{color}┌─ {title} {'─' * max(width - len(title) - 5, 0)}┐{C.RESET}")
+    for row in rows:
+        text = str(row)
+        if _visible_length(text) > inner_width:
+            text = text[:inner_width - 1] + "…"
+        padding = max(inner_width - _visible_length(text), 0)
+        print(f"{color}│{C.RESET} {text}{' ' * padding} {color}│{C.RESET}")
+    print(f"{color}└{'─' * (width - 2)}┘{C.RESET}")
+
+def metric_cards(metrics: List[Tuple[str, str, str]]):
+    """Print compact two-column metric cards"""
+    width = get_width()
+    if width < 52:
+        for label, value, color in metrics:
+            panel(label, [f"{color}{C.BOLD}{value}{C.RESET}"], color)
+        return
+
+    card_width = max((width - 6) // 2, 20)
+    for index in range(0, len(metrics), 2):
+        pair = metrics[index:index + 2]
+        cards = []
+        for label, value, color in pair:
+            label_text = label[:card_width - 4]
+            value_text = str(value)[:card_width - 4]
+            cards.append(
+                f"{C.GREY}{label_text}{C.RESET}\n"
+                f"{color}{C.BOLD}{value_text}{C.RESET}"
+            )
+        while len(cards) < 2:
+            cards.append("")
+        print(f"{C.CYAN}┌{'─' * card_width}┐  ┌{'─' * card_width}┐{C.RESET}")
+        left_lines = cards[0].splitlines() or [""]
+        right_lines = cards[1].splitlines() or [""]
+        for line_index in range(2):
+            left = left_lines[line_index] if line_index < len(left_lines) else ""
+            right = right_lines[line_index] if line_index < len(right_lines) else ""
+            left_length = _visible_length(left_lines[line_index]) if line_index < len(left_lines) else 0
+            right_length = _visible_length(right_lines[line_index]) if line_index < len(right_lines) else 0
+            print(
+                f"{C.CYAN}│{C.RESET} {left}{' ' * max(card_width - 1 - left_length, 0)}{C.CYAN}│{C.RESET}  "
+                f"{C.CYAN}│{C.RESET} {right}{' ' * max(card_width - 1 - right_length, 0)}{C.CYAN}│{C.RESET}"
+            )
+        print(f"{C.CYAN}└{'─' * card_width}┘  └{'─' * card_width}┘{C.RESET}")
+
+def progress_bar(value: float, maximum: float, width: int = 24, color: str = C.GREEN) -> str:
+    """Render a compact proportional progress bar"""
+    if maximum <= 0:
+        ratio = 0
+    else:
+        ratio = max(0, min(1, value / maximum))
+    filled = round(ratio * width)
+    return f"{color}{'━' * filled}{C.GREY}{'─' * (width - filled)}{C.RESET}"
 
 def status_badge(status: str) -> str:
     """Get colored status badge"""

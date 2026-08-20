@@ -4,6 +4,7 @@ Alakh Da Dhaaba - Main Entry Point
 
 from services import FoodCourtService
 from ui import *
+from config import ADMIN_PASSWORD, ADMIN_USERNAME
 import sys
 
 class FoodCourtApp:
@@ -398,20 +399,82 @@ class FoodCourtApp:
     
     def favorites_screen(self):
         """Favorites screen"""
+        while True:
+            clear_screen()
+            header("FAVORITES", "❤️")
+            print()
+
+            user = self.service.current_user
+            if not user:
+                return
+
+            if not user.favorites:
+                print(f"{C.GREY}No favorites yet.{C.RESET}")
+            else:
+                for index, favorite in enumerate(user.favorites, 1):
+                    print(
+                        f"{C.YELLOW}{index}.{C.RESET} {favorite['name']} - {money(favorite['price'])}"
+                        f" {C.GREY}| {favorite.get('restaurant', 'Unknown restaurant')}{C.RESET}"
+                    )
+
+            menu_box([
+                ("1", "❤️ Add Favorite"),
+                ("2", "🗑️ Remove Favorite"),
+                ("3", "🔙 Back"),
+            ])
+            choice = input(f"\n{C.CYAN}Choose: {C.RESET}").strip()
+
+            if choice == "1":
+                self.add_favorite_screen()
+            elif choice == "2":
+                self.remove_favorite_screen()
+            elif choice == "3":
+                return
+            else:
+                error("Invalid choice.")
+                pause()
+
+    def add_favorite_screen(self):
+        """Choose a menu item to save as a favorite"""
         clear_screen()
-        header("FAVORITES", "❤️")
+        header("ADD FAVORITE", "❤️")
         print()
-        
+
+        all_food = []
+        for restaurant_name, restaurant in self.service.get_restaurants():
+            for item_number, item in restaurant.menu.items():
+                all_food.append((restaurant_name, item_number, item))
+
+        for index, (restaurant_name, _, item) in enumerate(all_food, 1):
+            print(f"{C.YELLOW}{index}.{C.RESET} {item.name} - {money(item.price)} {C.GREY}| {restaurant_name}{C.RESET}")
+
+        try:
+            choice = int(input(f"\n{C.CYAN}Choose food number (0 to cancel): {C.RESET}"))
+            if choice == 0:
+                return
+            restaurant_name, item_number, _ = all_food[choice - 1]
+            success_flag, message = self.service.add_favorite(restaurant_name, item_number)
+            success(message) if success_flag else error(message)
+        except (ValueError, IndexError):
+            error("Invalid choice.")
+        pause()
+
+    def remove_favorite_screen(self):
+        """Remove one saved favorite"""
         user = self.service.current_user
-        if not user:
+        if not user or not user.favorites:
+            warn("No favorites to remove.")
+            pause()
             return
-        
-        if not user.favorites:
-            print(f"{C.GREY}No favorites yet.{C.RESET}")
-        else:
-            for index, fav in enumerate(user.favorites, 1):
-                print(f"{C.YELLOW}{index}.{C.RESET} {fav['name']} - {money(fav['price'])}")
-        
+
+        try:
+            choice = int(input(f"{C.CYAN}Enter favorite number (0 to cancel): {C.RESET}"))
+            if choice == 0:
+                return
+            success_flag, message = self.service.remove_favorite(choice - 1)
+            success(message) if success_flag else error(message)
+        except ValueError:
+            error("Please enter a number.")
         pause()
     
     def wallet_screen(self):
@@ -533,97 +596,370 @@ class FoodCourtApp:
         username = input(f"{C.CYAN}Admin username: {C.RESET}").strip()
         password = input(f"{C.CYAN}Admin password: {C.RESET}").strip()
         
-        if username == "admin" and password == "admin123":
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
             success("Admin login successful!")
             pause()
             self.admin_portal()
         else:
             error("Invalid admin credentials.")
             pause()
-    
+
+    def admin_users_screen(self):
+        """Manage user accounts"""
+        while True:
+            clear_screen()
+            header("MANAGE USERS", "👥")
+            print()
+            users = list(self.service.db.data.get("users", {}).items())
+            if not users:
+                print(f"{C.GREY}No users found.{C.RESET}")
+            for index, (username, user_data) in enumerate(users, 1):
+                print(
+                    f"{C.YELLOW}{index}.{C.RESET} {C.BOLD}{username}{C.RESET} | "
+                    f"{user_data.get('name', '')} | Wallet: {money(user_data.get('wallet', 0))} | "
+                    f"Points: {user_data.get('food_points', 0)}"
+                )
+            print(f"\n{C.GREY}0. Back{C.RESET}")
+            choice = input(f"{C.CYAN}Choose user to manage: {C.RESET}").strip()
+            if choice == "0":
+                return
+            try:
+                username, user_data = users[int(choice) - 1]
+            except (ValueError, IndexError):
+                error("Invalid user choice.")
+                pause()
+                continue
+
+            menu_box([("1", "✏️ Edit User"), ("2", "🗑️ Delete User"), ("3", "🔙 Back")])
+            action = input(f"{C.CYAN}Choose action: {C.RESET}").strip()
+            if action == "1":
+                name = input(f"Name [{user_data.get('name', '')}]: ").strip() or user_data.get("name", "")
+                try:
+                    wallet = int(input(f"Wallet [{user_data.get('wallet', 0)}]: ").strip() or user_data.get("wallet", 0))
+                    points = int(input(f"Food points [{user_data.get('food_points', 0)}]: ").strip() or user_data.get("food_points", 0))
+                    success_flag, message = self.service.update_user(username, name, wallet, points)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Wallet and food points must be numbers.")
+                pause()
+            elif action == "2":
+                confirm = input(f"Type DELETE to remove {username}: ").strip()
+                if confirm == "DELETE":
+                    success_flag, message = self.service.delete_user(username)
+                    success(message) if success_flag else error(message)
+                else:
+                    warn("Deletion cancelled.")
+                pause()
+
+    def admin_orders_screen(self):
+        """View order details and update order status"""
+        while True:
+            clear_screen()
+            header("MANAGE ORDERS", "📦")
+            print()
+            orders = self.service.db.data.get("orders", [])
+            if not orders:
+                print(f"{C.GREY}No orders found.{C.RESET}")
+                pause()
+                return
+            for index, order in enumerate(reversed(orders), 1):
+                print(
+                    f"{C.YELLOW}{index}.{C.RESET} {order.get('id', 'N/A')} | "
+                    f"{order.get('username', 'unknown')} | {money(order.get('total', 0))} | "
+                    f"{status_badge(order.get('status', 'Unknown'))}"
+                )
+            print(f"\n{C.GREY}0. Back{C.RESET}")
+            choice = input(f"{C.CYAN}Choose order: {C.RESET}").strip()
+            if choice == "0":
+                return
+            try:
+                order = list(reversed(orders))[int(choice) - 1]
+            except (ValueError, IndexError):
+                error("Invalid order choice.")
+                pause()
+                continue
+
+            clear_screen()
+            header(f"ORDER {order.get('id', 'N/A')}", "📦")
+            print(f"Customer: {order.get('username', 'unknown')}   Date: {order.get('date', 'N/A')}")
+            print(f"Status: {status_badge(order.get('status', 'Unknown'))}\n")
+            for item in order.get("items", []):
+                quantity = item.get("quantity", 0)
+                print(f"• {item.get('name', 'Unknown item')} × {quantity} = {money(item.get('price', 0) * quantity)}")
+            print(f"\nTotal: {money(order.get('total', 0))}")
+            statuses = ["Preparing", "Confirmed", "Ready", "Delivered", "Cancelled"]
+            for status_index, status in enumerate(statuses, 1):
+                print(f"{status_index}. {status_badge(status)}")
+            print("0. Back")
+            try:
+                status_choice = int(input(f"{C.CYAN}Choose new status: {C.RESET}"))
+                if status_choice == 0:
+                    continue
+                success_flag, message = self.service.update_order_status(order["id"], statuses[status_choice - 1])
+                success(message) if success_flag else error(message)
+            except (ValueError, IndexError):
+                error("Invalid status choice.")
+            pause()
+
+    def admin_reviews_screen(self):
+        """Review and delete submitted reviews"""
+        while True:
+            clear_screen()
+            header("MANAGE REVIEWS", "⭐")
+            print()
+            reviews = self.service.db.data.get("reviews", [])
+            if not reviews:
+                print(f"{C.GREY}No reviews found.{C.RESET}")
+            for index, review in enumerate(reviews, 1):
+                stars = "★" * int(review.get("rating", 0)) + "☆" * (5 - int(review.get("rating", 0)))
+                print(f"{C.YELLOW}{index}.{C.RESET} {review.get('restaurant', 'Unknown')} | {review.get('username', 'unknown')} | {C.YELLOW}{stars}{C.RESET}")
+                print(f"   {review.get('comment', '')}")
+            print(f"\n{C.GREY}0. Back{C.RESET}")
+            choice = input(f"{C.CYAN}Review number to delete: {C.RESET}").strip()
+            if choice == "0":
+                return
+            try:
+                success_flag, message = self.service.delete_review(int(choice) - 1)
+                success(message) if success_flag else error(message)
+            except ValueError:
+                error("Please enter a number.")
+            pause()
+
+    def admin_restaurants_screen(self):
+        """Manage hotel-style restaurant branches and their menus"""
+        while True:
+            clear_screen()
+            header("MANAGE HOTELS / RESTAURANTS", "🏪")
+            print()
+            restaurants = list(self.service.db.data.get("restaurants", {}).items())
+            for index, (name, restaurant) in enumerate(restaurants, 1):
+                print(f"{C.YELLOW}{index}.{C.RESET} {restaurant.get('emoji', '🍽️')} {name} | Seats: {restaurant.get('available_seats', 0)}/{restaurant.get('total_seats', 0)} | Foods: {len(restaurant.get('menu', {}))}")
+            menu_box([("1", "➕ Add Hotel / Restaurant"), ("2", "🛠️ Manage Branch"), ("3", "🗑️ Remove Branch"), ("4", "🔙 Back")])
+            action = input(f"{C.CYAN}Choose: {C.RESET}").strip()
+            if action == "1":
+                name = input("Restaurant name: ").strip()
+                emoji = input("Emoji (optional): ").strip()
+                try:
+                    seats = int(input("Total seats: ").strip())
+                    success_flag, message = self.service.add_restaurant(name, emoji, seats)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Seats must be a number.")
+                pause()
+            elif action in {"2", "3"}:
+                if not restaurants:
+                    error("No restaurants available.")
+                    pause()
+                    continue
+                try:
+                    index = int(input("Restaurant number: ").strip()) - 1
+                    name = restaurants[index][0]
+                except (ValueError, IndexError):
+                    error("Invalid restaurant choice.")
+                    pause()
+                    continue
+                if action == "3":
+                    confirm = input(f"Type DELETE to remove {name}: ").strip()
+                    if confirm == "DELETE":
+                        success_flag, message = self.service.remove_restaurant(name)
+                        success(message) if success_flag else error(message)
+                    else:
+                        warn("Removal cancelled.")
+                    pause()
+                else:
+                    self.admin_branch_screen(name)
+            elif action == "4":
+                return
+
+    def admin_branch_screen(self, restaurant_name):
+        """Manage one restaurant's food menu"""
+        while True:
+            restaurant = self.service.db.data["restaurants"].get(restaurant_name)
+            if not restaurant:
+                return
+            clear_screen()
+            header(restaurant_name.upper(), restaurant.get("emoji", "🍽️"))
+            print()
+            for number, item in restaurant.get("menu", {}).items():
+                print(f"{number}. {item.get('name', 'Unknown')} | {money(item.get('price', 0))} | Stock: {item.get('stock', 0)}")
+            menu_box([("1", "➕ Add Food"), ("2", "🗑️ Remove Food"), ("3", "🪑 Manage Seats"), ("4", "🔙 Back")])
+            action = input(f"{C.CYAN}Choose: {C.RESET}").strip()
+            if action == "1":
+                try:
+                    item = {
+                        "name": input("Food name: ").strip(),
+                        "price": int(input("Price: ").strip()),
+                        "category": input("Category: ").strip() or "General",
+                        "description": input("Description: ").strip(),
+                        "stock": int(input("Stock: ").strip()),
+                        "rating": float(input("Rating (0-5): ").strip() or "0"),
+                    }
+                    if not 0 <= item["rating"] <= 5:
+                        raise ValueError
+                    success_flag, message = self.service.add_menu_item(restaurant_name, item)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Price, stock, and rating must be valid numbers.")
+                pause()
+            elif action == "2":
+                item_number = input("Food number to remove: ").strip()
+                confirm = input("Type DELETE to confirm: ").strip()
+                if confirm == "DELETE":
+                    success_flag, message = self.service.remove_menu_item(restaurant_name, item_number)
+                    success(message) if success_flag else error(message)
+                else:
+                    warn("Removal cancelled.")
+                pause()
+            elif action == "3":
+                try:
+                    available_seats = int(input(f"Available seats (0-{restaurant.get('total_seats', 0)}): ").strip())
+                    success_flag, message = self.service.set_available_seats(restaurant_name, available_seats)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Available seats must be a number.")
+                pause()
+            elif action == "4":
+                return
+
+    def admin_announcements_screen(self):
+        """Publish and remove announcements"""
+        while True:
+            clear_screen()
+            header("ANNOUNCEMENTS", "🔔")
+            print()
+            announcements = self.service.db.data.get("announcements", [])
+            for index, announcement in enumerate(announcements, 1):
+                print(f"{C.YELLOW}{index}.{C.RESET} 📢 {announcement if isinstance(announcement, str) else announcement.get('message', '')}")
+            menu_box([("1", "📣 Publish Announcement"), ("2", "🗑️ Remove Announcement"), ("3", "🔙 Back")])
+            action = input(f"{C.CYAN}Choose: {C.RESET}").strip()
+            if action == "1":
+                message = input("Announcement: ").strip()
+                success_flag, result = self.service.add_announcement(message)
+                success(result) if success_flag else error(result)
+                pause()
+            elif action == "2":
+                try:
+                    success_flag, result = self.service.remove_announcement(int(input("Announcement number: ").strip()) - 1)
+                    success(result) if success_flag else error(result)
+                except ValueError:
+                    error("Please enter a number.")
+                pause()
+            elif action == "3":
+                return
+
+    def admin_stats_screen(self):
+        """Show an interactive dashboard summary"""
+        while True:
+            clear_screen()
+            header("DASHBOARD STATS", "📊")
+            print(f"{C.GREY}LIVE OPERATIONS SNAPSHOT  •  Press Enter to refresh{C.RESET}\n")
+            stats = self.service.get_revenue_stats()
+
+            metric_cards([
+                ("NET REVENUE", money_plain(stats["total_revenue"]), C.GREEN),
+                ("ACTIVE ORDERS", str(stats["total_orders"]), C.CYAN),
+                ("AVERAGE ORDER", money_plain(stats["avg_order"]), C.YELLOW),
+                ("CANCELLED", str(stats["cancelled_orders"]), C.RED),
+                ("CUSTOMERS", str(stats["user_count"]), C.MAGENTA),
+                ("BRANCHES", str(stats["restaurant_count"]), C.ORANGE),
+            ])
+
+            print()
+            sub_header("ORDER FLOW", "◈")
+            maximum_status_count = max(stats["status_counts"].values(), default=1)
+            for status, count in stats["status_counts"].items():
+                print(f"{status_badge(status)} {progress_bar(count, maximum_status_count, 18)} {C.WHITE}{count}{C.RESET}")
+
+            print()
+            top_items = stats["top_items"]
+            maximum_item_quantity = max((quantity for _, quantity in top_items), default=1)
+            item_rows = [
+                f"{index}. {name[:20]:<20} {progress_bar(quantity, maximum_item_quantity, 12, C.YELLOW)} {quantity} sold"
+                for index, (name, quantity) in enumerate(top_items, 1)
+            ]
+            if not item_rows:
+                item_rows = [f"{C.GREY}No completed sales yet.{C.RESET}"]
+            panel("TOP FOOD ITEMS", item_rows, C.MAGENTA)
+
+            branch_rows = []
+            maximum_branch_revenue = max((revenue for _, revenue in stats["restaurant_revenue"]), default=1)
+            for name, revenue in stats["restaurant_revenue"]:
+                branch_rows.append(
+                    f"{name[:18]:<18} {progress_bar(revenue, maximum_branch_revenue, 14, C.GREEN)} {money_plain(revenue)}"
+                )
+            if not branch_rows:
+                branch_rows = [f"{C.GREY}No branch revenue yet.{C.RESET}"]
+            panel("BRANCH PERFORMANCE", branch_rows, C.CYAN)
+
+            print(f"\n{C.DIM}Enter = refresh dashboard    0 = back to admin portal{C.RESET}")
+            if input(f"{C.CYAN}Action: {C.RESET}").strip() == "0":
+                return
+
     def admin_portal(self):
         """Admin portal"""
         while True:
             clear_screen()
             header("ADMIN PORTAL", "👑")
+            data = self.service.db.data
+            print(f"{C.GREY}CONTROL CENTER  •  Secure administrator workspace{C.RESET}\n")
+            metric_cards([
+                ("USERS", str(len(data.get("users", {}))), C.CYAN),
+                ("ORDERS", str(len(data.get("orders", []))), C.GREEN),
+                ("BRANCHES", str(len(data.get("restaurants", {}))), C.ORANGE),
+                ("REVIEWS", str(len(data.get("reviews", []))), C.YELLOW),
+            ])
             print()
             
             menu_box([
-                ("1", "👥 View Users"),
-                ("2", "📦 View Orders"),
-                ("3", "💰 Revenue Stats"),
-                ("4", "🪑 Manage Seats"),
-                ("5", "🔔 Send Announcement"),
-                ("6", "💾 Backup Data"),
-                ("7", "🚪 Logout"),
+                ("1", "👥 Manage Users"),
+                ("2", "📦 Manage Orders"),
+                ("3", "📊 Dashboard Stats"),
+                ("4", "🏪 Manage Hotels / Food"),
+                ("5", "⭐ Manage Reviews"),
+                ("6", "🔔 Announcements"),
+                ("7", "💾 Backup Data"),
+                ("8", "📜 Activity Logs"),
+                ("9", "🚪 Logout"),
             ])
             
             choice = input(f"\n{C.CYAN}Choose: {C.RESET}").strip()
             
             if choice == "1":
-                clear_screen()
-                header("USERS", "👥")
-                print()
-                for username, user_data in self.service.db.data["users"].items():
-                    print(f"👤 {C.BOLD}{username}{C.RESET} | {user_data['name']} | Wallet: {money(user_data['wallet'])}")
-                pause()
-            
+                self.admin_users_screen()
             elif choice == "2":
-                clear_screen()
-                header("ORDERS", "📦")
-                print()
-                for order in self.service.db.data["orders"]:
-                    print(f"🧾 {order['id']} | {order['username']} | {money(order['total'])} | {status_badge(order['status'])}")
-                pause()
-            
+                self.admin_orders_screen()
             elif choice == "3":
-                clear_screen()
-                header("REVENUE", "💰")
-                print()
-                stats = self.service.get_revenue_stats()
-                print(f"Total Revenue: {money(stats['total_revenue'])}")
-                print(f"Total Orders: {stats['total_orders']}")
-                print(f"Average Order: {money(stats['avg_order'])}")
-                pause()
-            
+                self.admin_stats_screen()
             elif choice == "4":
-                clear_screen()
-                header("MANAGE SEATS", "🪑")
-                print()
-                restaurants = self.service.get_restaurants()
-                for index, (name, restaurant) in enumerate(restaurants, 1):
-                    print(f"{C.YELLOW}{index}.{C.RESET} {restaurant.emoji} {name} - {seat_bar(restaurant.available_seats, restaurant.total_seats)}")
-                
-                try:
-                    choice_idx = int(input(f"\n{C.CYAN}Choose restaurant to reset: {C.RESET}")) - 1
-                    restaurant_name = restaurants[choice_idx][0]
-                    self.service.db.data["restaurants"][restaurant_name]["available_seats"] = \
-                        self.service.db.data["restaurants"][restaurant_name]["total_seats"]
-                    self.service.db.save()
-                    success(f"Seats reset for {restaurant_name}!")
-                except (ValueError, IndexError):
-                    error("Invalid choice.")
-                pause()
-            
+                self.admin_restaurants_screen()
             elif choice == "5":
-                clear_screen()
-                header("SEND ANNOUNCEMENT", "🔔")
-                print()
-                message = input(f"{C.CYAN}Enter announcement: {C.RESET}").strip()
-                if message:
-                    self.service.db.data["announcements"].append(message)
-                    self.service.db.save()
-                    success("Announcement sent!")
-                else:
-                    error("Announcement cannot be empty.")
-                pause()
-            
+                self.admin_reviews_screen()
             elif choice == "6":
+                self.admin_announcements_screen()
+            elif choice == "7":
                 backup_path = self.service.db.backup()
                 success(f"Backup created at: {backup_path}")
                 pause()
-            
-            elif choice == "7":
+            elif choice == "8":
+                clear_screen()
+                header("ACTIVITY LOGS", "📜")
+                print()
+                logs = self.service.db.data.get("activity_logs", [])
+                if not logs:
+                    print(f"{C.GREY}No activity recorded yet.{C.RESET}")
+                else:
+                    for entry in reversed(logs[-20:]):
+                        print(
+                            f"{C.GREY}{entry.get('time', '')}{C.RESET} | "
+                            f"{C.BOLD}{entry.get('username', 'system')}{C.RESET} | "
+                            f"{entry.get('action', '')}"
+                        )
+                        if entry.get("details"):
+                            print(f"   {C.WHITE}{entry['details']}{C.RESET}")
+                        small_line()
+                pause()
+
+            elif choice == "9":
                 return
 
 if __name__ == "__main__":

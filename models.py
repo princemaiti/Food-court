@@ -3,6 +3,8 @@ Core data models for Alakh Da Dhaaba
 """
 
 import hashlib
+import hmac
+import secrets
 from datetime import datetime
 from typing import Optional, List, Dict
 from config import POINTS_PER_RUPEE
@@ -24,12 +26,28 @@ class User:
     
     @staticmethod
     def _hash_password(password: str) -> str:
-        """Hash password using SHA-256"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Hash a password with a unique salt and PBKDF2-HMAC-SHA256"""
+        salt = secrets.token_bytes(16)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 310_000)
+        return f"pbkdf2_sha256$310000${salt.hex()}${digest.hex()}"
     
     def verify_password(self, password: str) -> bool:
-        """Check if password matches"""
-        return self._hash_password(password) == self.password_hash
+        """Check a password, including legacy hashes that can be migrated"""
+        if self.password_hash.startswith("pbkdf2_sha256$"):
+            try:
+                _, iterations, salt_hex, digest_hex = self.password_hash.split("$", 3)
+                expected = hashlib.pbkdf2_hmac(
+                    "sha256", password.encode(), bytes.fromhex(salt_hex), int(iterations)
+                )
+                return hmac.compare_digest(expected.hex(), digest_hex)
+            except (ValueError, TypeError):
+                return False
+
+        legacy_digest = hashlib.sha256(password.encode()).hexdigest()
+        if hmac.compare_digest(legacy_digest, self.password_hash):
+            self.password_hash = self._hash_password(password)
+            return True
+        return False
     
     def add_money(self, amount: int) -> None:
         """Add money to wallet"""
@@ -38,7 +56,7 @@ class User:
     
     def deduct_money(self, amount: int) -> bool:
         """Deduct money from wallet"""
-        if amount <= self.wallet:
+        if amount >= 0 and amount <= self.wallet:
             self.wallet -= amount
             return True
         return False
@@ -335,12 +353,14 @@ class Coupon:
         self.description = description
     
     def apply(self, total: int) -> tuple:
+        if total < 0:
+            return 0, 0
         if self.type == "percent":
             discount = (total * self.value) // 100
         else:
             discount = self.value
         
-        discount = min(discount, total)
+        discount = max(0, min(discount, total))
         return total - discount, discount
     
     def to_dict(self) -> Dict:

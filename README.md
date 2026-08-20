@@ -1,10 +1,40 @@
 # 🍽️ ALAKH DA DHAABA
 
-A Food Court Management System built in Python using only the standard library.
+A terminal-based food-court management system built with Python's standard library.
+It is designed as a learning project: it demonstrates authentication, carts, wallets,
+orders, reservations, reviews, administration, backups, and JSON persistence.
 
-**Requirements:**
-- Python 3.8+
-- No external dependencies
+## Requirements
+Money is represented as whole Indian rupees using integer arithmetic. This avoids floating-
+point rounding in the current product model; paise and payment-provider integration are
+outside the scope of this project.
+
+## Architecture
+
+The active application follows a small layered CLI architecture:
+
+```text
+main.py       presentation, input handling, navigation
+services.py   business workflows and validation
+models.py     domain objects and invariants
+database.py   JSON persistence, backups, and activity logs
+ui.py         terminal rendering helpers
+config.py     paths and application constants
+tests/        standard-library regression tests
+```
+
+The CLI calls services for state changes. Services update models and persistence; UI
+helpers only render output. The project intentionally keeps JSON and the terminal UI
+because they are appropriate for this educational scope. Further growth should split
+`main.py` and `services.py` by feature, starting with authentication, orders, restaurants,
+and administration, while preserving these boundaries.
+
+## Known Scope Limits
+
+- JSON persistence has no database transactions or multi-process concurrency control.
+- Backups should be created before manual data editing or experimental changes.
+- Admin credentials should be moved to an environment variable or secret store before
+	deploying beyond a local classroom/demo environment.
 
 **License:** MIT
 

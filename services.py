@@ -20,8 +20,11 @@ class FoodCourtService:
         """Register new user"""
         if not username or not name or not password:
             return False, "All fields are required"
+        if len(username.strip()) < 3 or len(password) < 6:
+            return False, "Username must have 3+ characters and password 6+ characters"
         
-        username = username.lower()
+        username = username.strip().lower()
+        name = name.strip()
         if username in self.db.data["users"]:
             return False, "Username already exists"
         
@@ -43,6 +46,7 @@ class FoodCourtService:
         if not user.verify_password(password):
             return False, "Invalid password"
         
+        user_data["password"] = user.password_hash
         self.current_user = user
         self.db.log_activity("user_login", username)
         self.db.save()
@@ -167,6 +171,16 @@ class FoodCourtService:
                     total, discount = coupon.apply(total)
                     coupon_applied = coupon.code
                     break
+
+        for cart_item in self.cart.items:
+            restaurant_data = self.db.data["restaurants"].get(cart_item.restaurant)
+            menu_item = next(
+                (item for item in restaurant_data.get("menu", {}).values()
+                 if item.get("name") == cart_item.name),
+                None,
+            ) if restaurant_data else None
+            if not menu_item or menu_item.get("stock", 0) < cart_item.quantity:
+                return False, f"Not enough stock for {cart_item.name}", None
         
         user_data = self.db.data["users"][self.current_user.username]
         if user_data["wallet"] < total:
@@ -217,18 +231,26 @@ class FoodCourtService:
                 if order_data["status"] in ["Delivered", "Cancelled"]:
                     return False, "Order cannot be cancelled"
                 
-                user_data = self.db.data["users"][self.current_user.username]
-                user_data["wallet"] += order_data["total"]
-                
-                self._restore_stock_after_cancel(order_data["items"])
-                
-                order_data["status"] = "Cancelled"
+                self._refund_order(order_data)
                 self.db.log_activity("order_cancelled", self.current_user.username, 
                                     f"Order {order_id} cancelled")
                 self.db.save()
                 return True, "Order cancelled and refunded"
         
         return False, "Order not found"
+
+    def _refund_order(self, order_data: Dict) -> None:
+        """Refund an order once and restore its stock"""
+        if order_data.get("refunded"):
+            return
+        user_data = self.db.data.get("users", {}).get(order_data.get("username"))
+        if user_data is not None:
+            user_data["wallet"] = user_data.get("wallet", 0) + order_data.get("total", 0)
+            if self.current_user and self.current_user.username == order_data.get("username"):
+                self.current_user.wallet = user_data["wallet"]
+        self._restore_stock_after_cancel(order_data.get("items", []))
+        order_data["status"] = "Cancelled"
+        order_data["refunded"] = True
 
     def update_order_status(self, order_id: str, new_status: str) -> Tuple[bool, str]:
         """Update an order status from the admin portal"""
@@ -239,8 +261,15 @@ class FoodCourtService:
         for order_data in self.db.data.get("orders", []):
             if order_data["id"] != order_id:
                 continue
-            if order_data["status"] in {"Cancelled", "Delivered"}:
+            if order_data["status"] == "Cancelled":
                 return False, "Completed orders cannot be updated"
+            if order_data["status"] == "Delivered":
+                return False, "Delivered orders cannot be updated"
+            if new_status == "Cancelled":
+                self._refund_order(order_data)
+                self.db.log_activity("order_cancelled", "admin", f"Order {order_id} cancelled")
+                self.db.save()
+                return True, f"Order {order_id} cancelled and refunded"
             if new_status != order_data["status"] and new_status not in Order.STATUS_FLOW.get(order_data["status"], []):
                 return False, f"Cannot move {order_data['status']} to {new_status}"
 
@@ -336,6 +365,10 @@ class FoodCourtService:
         
         if not 1 <= rating <= 5:
             return False, "Rating must be between 1 and 5"
+        if restaurant_name not in self.db.data.get("restaurants", {}):
+            return False, "Restaurant not found"
+        if not comment.strip():
+            return False, "Review comment cannot be empty"
         
         review = Review(self.current_user.username, restaurant_name, rating, comment)
         self.db.data.setdefault("reviews", []).append(review.to_dict())

@@ -45,6 +45,53 @@ class CouponTests(unittest.TestCase):
         self.assertEqual(discounted_total, 0)
         self.assertEqual(discount, 200)
 
+    def test_negative_discount_does_not_increase_total(self):
+        coupon = Coupon("BAD", "flat", -50)
+
+        discounted_total, discount = coupon.apply(200)
+
+        self.assertEqual(discounted_total, 200)
+        self.assertEqual(discount, 0)
+
+
+class AuthenticationTests(unittest.TestCase):
+    def test_passwords_are_salted_and_verifiable(self):
+        first = User("one", "One", "same-password")
+        second = User("two", "Two", "same-password")
+
+        self.assertNotEqual(first.password_hash, second.password_hash)
+        self.assertTrue(first.verify_password("same-password"))
+        self.assertFalse(first.verify_password("wrong-password"))
+
+    def test_legacy_sha256_hash_is_migrated_after_login(self):
+        import hashlib
+
+        user = User.from_dict("legacy", {
+            "name": "Legacy",
+            "password": hashlib.sha256(b"old-password").hexdigest(),
+        })
+
+        self.assertTrue(user.verify_password("old-password"))
+        self.assertTrue(user.password_hash.startswith("pbkdf2_sha256$"))
+
+    def test_login_persists_legacy_hash_upgrade(self):
+        import hashlib
+
+        legacy_data = {
+            "name": "Legacy",
+            "password": hashlib.sha256(b"old-password").hexdigest(),
+            "wallet": 100,
+        }
+        database = FakeDatabase({"users": {"legacy": legacy_data}})
+        service = FoodCourtService.__new__(FoodCourtService)
+        service.db = database
+        service.current_user = None
+
+        success, _ = service.login_user("legacy", "old-password")
+
+        self.assertTrue(success)
+        self.assertTrue(database.data["users"]["legacy"]["password"].startswith("pbkdf2_sha256$"))
+
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
@@ -95,6 +142,27 @@ class ServiceTests(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertEqual(self.database.data["orders"][0]["status"], "Confirmed")
+
+    def test_cancel_order_refunds_only_once(self):
+        self.database.data["restaurants"] = {
+            "Cafe": {
+                "menu": {"1": {"name": "Soup", "stock": 0}},
+            }
+        }
+        self.database.data["orders"][0].update({
+            "total": 40,
+            "items": [{"name": "Soup", "quantity": 1, "restaurant": "Cafe"}],
+        })
+        self.user.wallet = 60
+        self.database.data["users"]["tester"]["wallet"] = 60
+
+        first_success, _ = self.service.cancel_order("ALD1")
+        second_success, _ = self.service.cancel_order("ALD1")
+
+        self.assertTrue(first_success)
+        self.assertFalse(second_success)
+        self.assertEqual(self.user.wallet, 100)
+        self.assertEqual(self.database.data["restaurants"]["Cafe"]["menu"]["1"]["stock"], 1)
 
 
 if __name__ == "__main__":

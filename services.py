@@ -6,8 +6,7 @@ import os
 from typing import Optional, List, Dict, Tuple
 from models import User, Restaurant, FoodItem, Cart, Order, Reservation, Review, Coupon
 from database import Database
-from config import RECEIPT_DIR
-from ui import success, error, warn, info, money, C
+from config import POINTS_PER_RUPEE, RECEIPT_DIR
 
 class FoodCourtService:
     """Main business logic"""
@@ -56,6 +55,20 @@ class FoodCourtService:
             self.db.save()
             self.current_user = None
             self.cart.clear()
+
+    def add_wallet_money(self, amount: int) -> Tuple[bool, str]:
+        """Add a positive amount to the logged-in user's wallet"""
+        if not self.current_user:
+            return False, "Please login first"
+        if amount <= 0:
+            return False, "Amount must be greater than zero"
+
+        user_data = self.db.data["users"][self.current_user.username]
+        user_data["wallet"] = user_data.get("wallet", 0) + amount
+        self.current_user.wallet = user_data["wallet"]
+        self.db.log_activity("wallet_top_up", self.current_user.username, f"Added ₹{amount}")
+        self.db.save()
+        return True, f"Added ₹{amount} to wallet"
     
     def get_restaurants(self) -> List[Tuple[str, Restaurant]]:
         """Get all restaurants"""
@@ -73,6 +86,8 @@ class FoodCourtService:
     
     def add_to_cart(self, restaurant_name: str, item_number: str, quantity: int = 1) -> Tuple[bool, str]:
         """Add item to cart"""
+        if quantity <= 0:
+            return False, "Quantity must be greater than zero"
         restaurant = self.get_restaurant(restaurant_name)
         if not restaurant:
             return False, "Restaurant not found"
@@ -164,7 +179,7 @@ class FoodCourtService:
                      self.cart.to_list(), total)
         
         user_data["wallet"] -= total
-        points = total // 10
+        points = total // POINTS_PER_RUPEE
         user_data["food_points"] = user_data.get("food_points", 0) + points
         
         self._update_stock_after_order()

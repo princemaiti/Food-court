@@ -6,7 +6,7 @@ import json
 import os
 from datetime import datetime
 from typing import Dict
-from config import DATA_FILE, BACKUP_DIR
+from config import BACKUP_DIR, DATA_FILE, MAX_LOG_ENTRIES
 from ui import warn
 
 class Database:
@@ -168,5 +168,5 @@ class Database:
         }
         self.data.setdefault("activity_logs", []).append(entry)
         
-        if len(self.data["activity_logs"]) > 200:
-            self.data["activity_logs"] = self.data["activity_logs"][-200:]
+        if len(self.data["activity_logs"]) > MAX_LOG_ENTRIES:
+            self.data["activity_logs"] = self.data["activity_logs"][-MAX_LOG_ENTRIES:]

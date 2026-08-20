@@ -493,10 +493,10 @@ class FoodCourtApp:
         try:
             amount = int(input(f"\n{C.CYAN}Enter amount to add (0 to skip): {C.RESET}"))
             if amount > 0:
-                user.wallet += amount
-                self.service.db.data["users"][user.username]["wallet"] = user.wallet
-                self.service.db.save()
-                success(f"Added {money_plain(amount)} to wallet!")
+                success_flag, message = self.service.add_wallet_money(amount)
+                success(message) if success_flag else error(message)
+            elif amount < 0:
+                error("Amount must be greater than zero.")
         except ValueError:
             error("Invalid amount.")
         

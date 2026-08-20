@@ -5,6 +5,7 @@ Core data models for Alakh Da Dhaaba
 import hashlib
 from datetime import datetime
 from typing import Optional, List, Dict
+from config import POINTS_PER_RUPEE
 
 class User:
     """Represents a user account"""
@@ -44,7 +45,7 @@ class User:
     
     def add_points(self, amount_spent: int) -> int:
         """Add food points based on spending"""
-        points = amount_spent // 10
+        points = amount_spent // POINTS_PER_RUPEE
         self.food_points += points
         return points
     
@@ -204,6 +205,8 @@ class Cart:
         self.items: List[CartItem] = []
     
     def add_item(self, item: FoodItem, restaurant_name: str, quantity: int = 1) -> bool:
+        if quantity <= 0:
+            return False
         for cart_item in self.items:
             if cart_item.name == item.name and cart_item.restaurant == restaurant_name:
                 if cart_item.quantity + quantity <= item.stock:

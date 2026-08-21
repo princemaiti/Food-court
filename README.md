@@ -14,8 +14,11 @@ outside the scope of this project.
 The active application follows a small layered CLI architecture:
 
 ```text
-main.py       presentation, input handling, navigation
+main.py       application startup and login/register screens
+user_portal.py user navigation loop
+admin_portal.py admin navigation loop
 services.py   business workflows and validation
+auth_service.py authentication and session workflows
 models.py     domain objects and invariants
 database.py   JSON persistence, backups, and activity logs
 ui.py         terminal rendering helpers
@@ -25,9 +28,9 @@ tests/        standard-library regression tests
 
 The CLI calls services for state changes. Services update models and persistence; UI
 helpers only render output. The project intentionally keeps JSON and the terminal UI
-because they are appropriate for this educational scope. Further growth should split
-`main.py` and `services.py` by feature, starting with authentication, orders, restaurants,
-and administration, while preserving these boundaries.
+because they are appropriate for this educational scope. The portal mixins and
+authentication service are feature boundaries that can be extended with order,
+reservation, restaurant, and admin service modules as those workflows grow.
 
 ## Known Scope Limits
 
@@ -43,7 +46,7 @@ and administration, while preserving these boundaries.
 ## ✨ FEATURES
 
 ### 👤 User Features
-- **User Authentication** - Secure registration & login with SHA-256 password hashing
+- **User Authentication** - Registration and login with salted PBKDF2-HMAC-SHA256 hashing
 - **Browse Restaurants** - 4 restaurants with 40+ food items
 - **Smart Cart System** - Add/remove items, change quantities, real-time total
 - **Wallet System** - Add money, track balance, earn food points

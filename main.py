@@ -5,9 +5,11 @@ Alakh Da Dhaaba - Main Entry Point
 from services import FoodCourtService
 from ui import *
 from config import ADMIN_PASSWORD, ADMIN_USERNAME
+from user_portal import UserPortalMixin
+from admin_portal import AdminPortalMixin
 import sys
 
-class FoodCourtApp:
+class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
     """Main application"""
     
     def __init__(self):
@@ -81,68 +83,6 @@ class FoodCourtApp:
         else:
             error(message)
         pause()
-    
-    def user_portal(self):
-        """User portal"""
-        while True:
-            clear_screen()
-            user = self.service.current_user
-            
-            if not user:
-                return
-            
-            header("USER PORTAL", "👤")
-            print(f"\nWelcome, {C.BOLD}{user.name}{C.RESET}! 👋")
-            print(f"💰 Wallet: {money(user.wallet)}   ⭐ Points: {C.YELLOW}{user.food_points}{C.RESET}")
-            print()
-            
-            menu_box([
-                ("1", "🍔 Browse Food"),
-                ("2", "🏪 Restaurants"),
-                ("3", "🛒 Cart"),
-                ("4", "🪑 Book Seats"),
-                ("5", "📅 My Reservations"),
-                ("6", "📦 My Orders"),
-                ("7", "❤️ Favorites"),
-                ("8", "💰 Wallet"),
-                ("9", "⭐ Reviews"),
-                ("10", "🔔 Notifications"),
-                ("11", "👤 Profile"),
-                ("12", "🚪 Logout"),
-            ])
-            
-            choice = input(f"\n{C.CYAN}Enter your choice: {C.RESET}").strip()
-            
-            if choice == "1":
-                self.browse_food()
-            elif choice == "2":
-                self.restaurants_screen()
-            elif choice == "3":
-                self.cart_screen()
-            elif choice == "4":
-                self.book_seats_screen()
-            elif choice == "5":
-                self.my_reservations_screen()
-            elif choice == "6":
-                self.my_orders_screen()
-            elif choice == "7":
-                self.favorites_screen()
-            elif choice == "8":
-                self.wallet_screen()
-            elif choice == "9":
-                self.reviews_screen()
-            elif choice == "10":
-                self.notifications_screen()
-            elif choice == "11":
-                self.profile_screen()
-            elif choice == "12":
-                self.service.logout_user()
-                success("Logged out successfully!")
-                pause()
-                return
-            else:
-                error("Invalid choice.")
-                pause()
     
     def browse_food(self):
         """Browse food"""
@@ -633,12 +573,15 @@ class FoodCourtApp:
             menu_box([("1", "✏️ Edit User"), ("2", "🗑️ Delete User"), ("3", "🔙 Back")])
             action = input(f"{C.CYAN}Choose action: {C.RESET}").strip()
             if action == "1":
+                print(f"\n{C.GREY}Edit account details. Press Enter to keep the current value.{C.RESET}")
                 name = input(f"Name [{user_data.get('name', '')}]: ").strip() or user_data.get("name", "")
                 try:
                     wallet = int(input(f"Wallet [{user_data.get('wallet', 0)}]: ").strip() or user_data.get("wallet", 0))
                     points = int(input(f"Food points [{user_data.get('food_points', 0)}]: ").strip() or user_data.get("food_points", 0))
                     success_flag, message = self.service.update_user(username, name, wallet, points)
                     success(message) if success_flag else error(message)
+                    if success_flag:
+                        print(f"{C.GREY}Saved profile for {username}. Balance: {money(wallet)}{C.RESET}")
                 except ValueError:
                     error("Wallet and food points must be numbers.")
                 pause()
@@ -683,10 +626,36 @@ class FoodCourtApp:
             header(f"ORDER {order.get('id', 'N/A')}", "📦")
             print(f"Customer: {order.get('username', 'unknown')}   Date: {order.get('date', 'N/A')}")
             print(f"Status: {status_badge(order.get('status', 'Unknown'))}\n")
-            for item in order.get("items", []):
+            for item_index, item in enumerate(order.get("items", []), 1):
                 quantity = item.get("quantity", 0)
-                print(f"• {item.get('name', 'Unknown item')} × {quantity} = {money(item.get('price', 0) * quantity)}")
+                print(f"{C.YELLOW}{item_index}.{C.RESET} {item.get('name', 'Unknown item')} × {quantity} = {money(item.get('price', 0) * quantity)}")
             print(f"\nTotal: {money(order.get('total', 0))}")
+            if order.get("status") in {"Delivered", "Cancelled"}:
+                print(f"{C.GREY}🔒 This order is closed and its items cannot be edited.{C.RESET}")
+                pause()
+                continue
+
+            print("\n1. Edit item quantity")
+            print("2. Update order status")
+            print("0. Back")
+            action = input(f"{C.CYAN}Choose action: {C.RESET}").strip()
+            if action == "0":
+                continue
+            if action == "1":
+                try:
+                    item_choice = int(input(f"{C.CYAN}Item number to edit: {C.RESET}")) - 1
+                    quantity = int(input(f"{C.CYAN}New quantity: {C.RESET}"))
+                    success_flag, message = self.service.update_order_item_quantity(order["id"], item_choice, quantity)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Item number and quantity must be numbers.")
+                pause()
+                continue
+            if action != "2":
+                error("Invalid action.")
+                pause()
+                continue
+
             statuses = ["Preparing", "Confirmed", "Ready", "Delivered", "Cancelled"]
             for status_index, status in enumerate(statuses, 1):
                 print(f"{status_index}. {status_badge(status)}")
@@ -893,73 +862,6 @@ class FoodCourtApp:
 
             print(f"\n{C.DIM}Enter = refresh dashboard    0 = back to admin portal{C.RESET}")
             if input(f"{C.CYAN}Action: {C.RESET}").strip() == "0":
-                return
-
-    def admin_portal(self):
-        """Admin portal"""
-        while True:
-            clear_screen()
-            header("ADMIN PORTAL", "👑")
-            data = self.service.db.data
-            print(f"{C.GREY}CONTROL CENTER  •  Secure administrator workspace{C.RESET}\n")
-            metric_cards([
-                ("USERS", str(len(data.get("users", {}))), C.CYAN),
-                ("ORDERS", str(len(data.get("orders", []))), C.GREEN),
-                ("BRANCHES", str(len(data.get("restaurants", {}))), C.ORANGE),
-                ("REVIEWS", str(len(data.get("reviews", []))), C.YELLOW),
-            ])
-            print()
-            
-            menu_box([
-                ("1", "👥 Manage Users"),
-                ("2", "📦 Manage Orders"),
-                ("3", "📊 Dashboard Stats"),
-                ("4", "🏪 Manage Hotels / Food"),
-                ("5", "⭐ Manage Reviews"),
-                ("6", "🔔 Announcements"),
-                ("7", "💾 Backup Data"),
-                ("8", "📜 Activity Logs"),
-                ("9", "🚪 Logout"),
-            ])
-            
-            choice = input(f"\n{C.CYAN}Choose: {C.RESET}").strip()
-            
-            if choice == "1":
-                self.admin_users_screen()
-            elif choice == "2":
-                self.admin_orders_screen()
-            elif choice == "3":
-                self.admin_stats_screen()
-            elif choice == "4":
-                self.admin_restaurants_screen()
-            elif choice == "5":
-                self.admin_reviews_screen()
-            elif choice == "6":
-                self.admin_announcements_screen()
-            elif choice == "7":
-                backup_path = self.service.db.backup()
-                success(f"Backup created at: {backup_path}")
-                pause()
-            elif choice == "8":
-                clear_screen()
-                header("ACTIVITY LOGS", "📜")
-                print()
-                logs = self.service.db.data.get("activity_logs", [])
-                if not logs:
-                    print(f"{C.GREY}No activity recorded yet.{C.RESET}")
-                else:
-                    for entry in reversed(logs[-20:]):
-                        print(
-                            f"{C.GREY}{entry.get('time', '')}{C.RESET} | "
-                            f"{C.BOLD}{entry.get('username', 'system')}{C.RESET} | "
-                            f"{entry.get('action', '')}"
-                        )
-                        if entry.get("details"):
-                            print(f"   {C.WHITE}{entry['details']}{C.RESET}")
-                        small_line()
-                pause()
-
-            elif choice == "9":
                 return
 
 if __name__ == "__main__":

@@ -1,4 +1,12 @@
-# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vscode/
+
+# Runtime data generated locally
+data/log.json
+receipts/*.txt
+backups/*.json# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class

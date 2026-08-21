@@ -4,6 +4,7 @@ Database management for Alakh Da Dhaaba
 
 import json
 import os
+import shutil
 from datetime import datetime
 from typing import Dict
 from config import BACKUP_DIR, DATA_FILE, MAX_LOG_ENTRIES
@@ -26,8 +27,20 @@ class Database:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
-            warn("Data file corrupted. Creating fresh database.")
+            self._preserve_corrupt_data()
+            warn("Data file corrupted. A copy was preserved in backups; creating fresh database.")
             return self._create_default_data()
+
+    def _preserve_corrupt_data(self) -> None:
+        """Keep an unreadable data file before creating replacement data."""
+        if not os.path.exists(DATA_FILE):
+            return
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        filename = f"corrupt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        try:
+            shutil.copy2(DATA_FILE, os.path.join(BACKUP_DIR, filename))
+        except OSError:
+            pass
     
     def save(self) -> None:
         """Save data to file"""

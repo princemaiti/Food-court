@@ -7,8 +7,9 @@ from typing import Optional, List, Dict, Tuple
 from models import User, Restaurant, FoodItem, Cart, Order, Reservation, Review, Coupon
 from database import Database
 from config import POINTS_PER_RUPEE, RECEIPT_DIR
+from auth_service import AuthServiceMixin
 
-class FoodCourtService:
+class FoodCourtService(AuthServiceMixin):
     """Main business logic"""
     
     def __init__(self):
@@ -16,50 +17,6 @@ class FoodCourtService:
         self.current_user: Optional[User] = None
         self.cart = Cart()
     
-    def register_user(self, username: str, name: str, password: str) -> Tuple[bool, str]:
-        """Register new user"""
-        if not username or not name or not password:
-            return False, "All fields are required"
-        if len(username.strip()) < 3 or len(password) < 6:
-            return False, "Username must have 3+ characters and password 6+ characters"
-        
-        username = username.strip().lower()
-        name = name.strip()
-        if username in self.db.data["users"]:
-            return False, "Username already exists"
-        
-        user = User(username, name, password)
-        self.db.data["users"][username] = user.to_dict()
-        self.db.log_activity("user_registered", username)
-        self.db.save()
-        return True, "Account created successfully"
-    
-    def login_user(self, username: str, password: str) -> Tuple[bool, str]:
-        """Login user"""
-        username = username.lower()
-        user_data = self.db.data["users"].get(username)
-        
-        if not user_data:
-            return False, "User not found"
-        
-        user = User.from_dict(username, user_data)
-        if not user.verify_password(password):
-            return False, "Invalid password"
-        
-        user_data["password"] = user.password_hash
-        self.current_user = user
-        self.db.log_activity("user_login", username)
-        self.db.save()
-        return True, f"Welcome back, {user.name}!"
-    
-    def logout_user(self) -> None:
-        """Logout current user"""
-        if self.current_user:
-            self.db.log_activity("user_logout", self.current_user.username)
-            self.db.save()
-            self.current_user = None
-            self.cart.clear()
-
     def add_wallet_money(self, amount: int) -> Tuple[bool, str]:
         """Add a positive amount to the logged-in user's wallet"""
         if not self.current_user:
@@ -103,7 +60,7 @@ class FoodCourtService:
         if not item.is_available:
             return False, f"{item.name} is sold out"
         
-        if self.cart.add_item(item, restaurant_name, quantity):
+        if self.cart.add_item(item, restaurant_name, quantity, item_number):
             return True, f"{item.name} added to cart"
         return False, "Not enough stock"
 
@@ -174,11 +131,14 @@ class FoodCourtService:
 
         for cart_item in self.cart.items:
             restaurant_data = self.db.data["restaurants"].get(cart_item.restaurant)
-            menu_item = next(
-                (item for item in restaurant_data.get("menu", {}).values()
-                 if item.get("name") == cart_item.name),
-                None,
-            ) if restaurant_data else None
+            menu = restaurant_data.get("menu", {}) if restaurant_data else {}
+            menu_item = menu.get(cart_item.item_number)
+            if menu_item is None:
+                # Older carts and orders did not persist the menu number.
+                menu_item = next(
+                    (item for item in menu.values() if item.get("name") == cart_item.name),
+                    None,
+                )
             if not menu_item or menu_item.get("stock", 0) < cart_item.quantity:
                 return False, f"Not enough stock for {cart_item.name}", None
         
@@ -215,11 +175,17 @@ class FoodCourtService:
         for cart_item in self.cart.items:
             restaurant_data = self.db.data["restaurants"].get(cart_item.restaurant)
             if restaurant_data:
-                for item in restaurant_data["menu"].values():
-                    if item["name"] == cart_item.name:
-                        item["stock"] = max(0, item["stock"] - cart_item.quantity)
-                        if item["stock"] <= 0:
-                            item["sold_out"] = True
+                menu = restaurant_data.get("menu", {})
+                item = menu.get(cart_item.item_number)
+                if item is None:
+                    item = next(
+                        (entry for entry in menu.values() if entry.get("name") == cart_item.name),
+                        None,
+                    )
+                if item is not None:
+                    item["stock"] = max(0, item["stock"] - cart_item.quantity)
+                    if item["stock"] <= 0:
+                        item["sold_out"] = True
     
     def cancel_order(self, order_id: str) -> Tuple[bool, str]:
         """Cancel order with refund"""
@@ -280,6 +246,51 @@ class FoodCourtService:
 
         return False, "Order not found"
 
+    def update_order_item_quantity(self, order_id: str, item_index: int, quantity: int) -> Tuple[bool, str]:
+        """Edit an active order item while keeping stock and wallet totals accurate."""
+        if quantity <= 0:
+            return False, "Quantity must be greater than zero"
+
+        for order_data in self.db.data.get("orders", []):
+            if order_data.get("id") != order_id:
+                continue
+            if order_data.get("status") in {"Delivered", "Cancelled"}:
+                return False, "Delivered and cancelled orders cannot be edited"
+
+            items = order_data.get("items", [])
+            if not 0 <= item_index < len(items):
+                return False, "Invalid order item"
+
+            item = items[item_index]
+            old_quantity = item.get("quantity", 0)
+            change = quantity - old_quantity
+            user_data = self.db.data.get("users", {}).get(order_data.get("username"))
+            restaurant = self.db.data.get("restaurants", {}).get(item.get("restaurant"), {})
+            menu = restaurant.get("menu", {})
+            menu_item = menu.get(item.get("item_number", ""))
+            if menu_item is None:
+                menu_item = next((entry for entry in menu.values() if entry.get("name") == item.get("name")), None)
+            if menu_item is None:
+                return False, "The original menu item is no longer available"
+
+            price_change = change * item.get("price", 0)
+            if change > 0 and menu_item.get("stock", 0) < change:
+                return False, "Not enough stock for the new quantity"
+            if price_change > 0 and (not user_data or user_data.get("wallet", 0) < price_change):
+                return False, "Customer wallet cannot cover the price difference"
+
+            menu_item["stock"] = max(0, menu_item.get("stock", 0) - change)
+            menu_item["sold_out"] = menu_item["stock"] <= 0
+            if user_data is not None:
+                user_data["wallet"] = user_data.get("wallet", 0) - price_change
+            item["quantity"] = quantity
+            order_data["total"] = order_data.get("total", 0) + price_change
+            self.db.log_activity("order_item_updated", "admin", f"Order {order_id}: {item.get('name', 'item')} x{quantity}")
+            self.db.save()
+            return True, f"{item.get('name', 'Item')} quantity updated to {quantity}"
+
+        return False, "Order not found"
+
     def set_available_seats(self, restaurant_name: str, available_seats: int) -> Tuple[bool, str]:
         """Set the available seats for a restaurant"""
         restaurant = self.db.data.get("restaurants", {}).get(restaurant_name)
@@ -298,10 +309,16 @@ class FoodCourtService:
         for item in items:
             restaurant_data = self.db.data["restaurants"].get(item["restaurant"])
             if restaurant_data:
-                for menu_item in restaurant_data["menu"].values():
-                    if menu_item["name"] == item["name"]:
-                        menu_item["stock"] += item["quantity"]
-                        menu_item["sold_out"] = False
+                menu = restaurant_data.get("menu", {})
+                menu_item = menu.get(item.get("item_number", ""))
+                if menu_item is None:
+                    menu_item = next(
+                        (entry for entry in menu.values() if entry.get("name") == item.get("name")),
+                        None,
+                    )
+                if menu_item is not None:
+                    menu_item["stock"] += item["quantity"]
+                    menu_item["sold_out"] = False
     
     def book_seats(self, restaurant_name: str, seats: int) -> Tuple[bool, str]:
         """Book seats"""

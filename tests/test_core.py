@@ -1,8 +1,11 @@
 import unittest
+from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from models import Cart, Coupon, FoodItem, User
 from services import FoodCourtService
+from ui import C, _menu_label, _visible_length, menu_box
 
 
 class FakeDatabase:
@@ -34,6 +37,37 @@ class CartTests(unittest.TestCase):
 
         self.assertTrue(cart.update_quantity(0, 0))
         self.assertEqual(cart.items, [])
+
+    def test_same_named_items_from_different_menu_entries_stay_separate(self):
+        cart = Cart()
+        first = FoodItem("Special", 80, stock=5)
+        second = FoodItem("Special", 120, stock=5)
+
+        self.assertTrue(cart.add_item(first, "Cafe", 1, "1"))
+        self.assertTrue(cart.add_item(second, "Cafe", 1, "2"))
+
+        self.assertEqual(len(cart.items), 2)
+        self.assertEqual(cart.total, 200)
+
+
+class UITests(unittest.TestCase):
+    def test_emoji_width_ignores_ansi_and_zero_width_marks(self):
+        self.assertEqual(_visible_length(f" {C.YELLOW}1.{C.RESET} 🍔 Browse Food"), 18)
+        self.assertEqual(_visible_length("❤️"), 2)
+        self.assertEqual(_visible_length("👨‍🍳"), 2)
+
+    def test_menu_labels_have_consistent_icon_spacing(self):
+        self.assertEqual(_menu_label("🍔 Browse Food"), "🍔  Browse Food")
+        self.assertEqual(_menu_label("Logout"), "Logout")
+        self.assertEqual(_menu_label("Manage Users"), "Manage Users")
+
+    def test_menu_box_rows_keep_their_border_alignment(self):
+        output = StringIO()
+        with patch("ui.get_width", return_value=40), patch("sys.stdout", output):
+            menu_box([("1", "🍔 Browse Food"), ("2", "Logout")])
+
+        rows = output.getvalue().splitlines()
+        self.assertTrue(all(_visible_length(row) == 40 for row in rows))
 
 
 class CouponTests(unittest.TestCase):
@@ -142,6 +176,44 @@ class ServiceTests(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertEqual(self.database.data["orders"][0]["status"], "Confirmed")
+
+    def test_delivered_order_cannot_edit_item_quantity(self):
+        self.database.data["orders"][0].update({
+            "status": "Delivered",
+            "items": [{"name": "Soup", "price": 80, "quantity": 1, "restaurant": "Cafe"}],
+        })
+        self.database.data["restaurants"] = {
+            "Cafe": {"menu": {"1": {"name": "Soup", "price": 80, "stock": 4}}},
+        }
+
+        success, _ = self.service.update_order_item_quantity("ALD1", 0, 2)
+
+        self.assertFalse(success)
+        self.assertEqual(self.database.data["orders"][0]["items"][0]["quantity"], 1)
+
+    def test_active_order_item_edit_updates_total_wallet_and_stock(self):
+        self.database.data["orders"][0].update({
+            "items": [{"name": "Soup", "price": 80, "quantity": 1, "restaurant": "Cafe", "item_number": "1"}],
+        })
+        self.database.data["restaurants"] = {
+            "Cafe": {"menu": {"1": {"name": "Soup", "price": 80, "stock": 4}}},
+        }
+
+        success, _ = self.service.update_order_item_quantity("ALD1", 0, 2)
+
+        self.assertTrue(success)
+        self.assertEqual(self.database.data["orders"][0]["items"][0]["quantity"], 2)
+        self.assertEqual(self.database.data["orders"][0]["total"], 180)
+        self.assertEqual(self.database.data["users"]["tester"]["wallet"], 20)
+        self.assertEqual(self.database.data["restaurants"]["Cafe"]["menu"]["1"]["stock"], 3)
+
+    def test_admin_can_update_user_name_balance_and_points(self):
+        success, _ = self.service.update_user("tester", "Updated User", 250, 40)
+
+        self.assertTrue(success)
+        self.assertEqual(self.database.data["users"]["tester"]["name"], "Updated User")
+        self.assertEqual(self.database.data["users"]["tester"]["wallet"], 250)
+        self.assertEqual(self.database.data["users"]["tester"]["food_points"], 40)
 
     def test_cancel_order_refunds_only_once(self):
         self.database.data["restaurants"] = {

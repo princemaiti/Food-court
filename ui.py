@@ -31,13 +31,29 @@ if os.name == "nt":
 C = Colors()
 
 def _visible_length(text: str) -> int:
-    """Return terminal display width without ANSI color sequences"""
+    """Return terminal display width without ANSI or zero-width emoji marks."""
     plain_text = re.sub(r"\x1b\[[0-9;]*m", "", text)
     width = 0
-    for character in plain_text:
-        if unicodedata.combining(character):
+    joined_emoji = False
+    for index, character in enumerate(plain_text):
+        if character == "\u200d":
+            joined_emoji = True
             continue
-        width += 2 if unicodedata.east_asian_width(character) in {"W", "F"} else 1
+        if joined_emoji:
+            joined_emoji = False
+            continue
+        if (
+            unicodedata.combining(character)
+            or unicodedata.category(character) in {"Cf", "Mn", "Me"}
+            or character in {"\ufe0e", "\ufe0f"}
+        ):
+            continue
+        emoji_presentation = (
+            index + 1 < len(plain_text)
+            and plain_text[index + 1] == "\ufe0f"
+            and 0x2000 <= ord(character) <= 0x32FF
+        )
+        width += 2 if emoji_presentation or unicodedata.east_asian_width(character) in {"W", "F"} else 1
     return width
 
 def get_width() -> int:
@@ -103,15 +119,27 @@ def money_plain(amount) -> str:
     """Format money without color"""
     return f"₹{amount}"
 
+def _menu_label(label: str) -> str:
+    """Add consistent breathing room between an icon and its label."""
+    label = label.strip()
+    if not label or ord(label[0]) < 0x2000:
+        return label
+    separator = label.find(" ")
+    if separator > 0:
+        return f"{label[:separator]}  {label[separator + 1:].lstrip()}"
+    return label
+
 def menu_box(options: List[Tuple[str, str]]):
-    """Print numbered menu in a box"""
-    w = get_width()
-    print(f"{C.CYAN}┌{'─' * (w - 2)}┐{C.RESET}")
+    """Print a consistently padded numbered menu in a box."""
+    w = max(get_width(), 32)
+    inner_width = w - 2
+    print(f"{C.CYAN}┌{'─' * inner_width}┐{C.RESET}")
     for number, label in options:
-        text = f" {C.YELLOW}{number}.{C.RESET} {label}"
-        pad = w - 2 - _visible_length(f" {number}. {label}")
+        formatted_label = _menu_label(label)
+        text = f" {C.YELLOW}{number}.{C.RESET} {formatted_label}"
+        pad = inner_width - _visible_length(f" {number}. {formatted_label}")
         print(f"{C.CYAN}│{C.RESET}{text}{' ' * max(pad, 0)}{C.CYAN}│{C.RESET}")
-    print(f"{C.CYAN}└{'─' * (w - 2)}┘{C.RESET}")
+    print(f"{C.CYAN}└{'─' * inner_width}┘{C.RESET}")
 
 def panel(title: str, rows: List[str], color: str = C.CYAN):
     """Print a bordered information panel"""
@@ -171,7 +199,7 @@ def progress_bar(value: float, maximum: float, width: int = 24, color: str = C.G
     return f"{color}{'━' * filled}{C.GREY}{'─' * (width - filled)}{C.RESET}"
 
 def status_badge(status: str) -> str:
-    """Get colored status badge"""
+    """Get a colored, easy-to-scan status badge."""
     colors = {
         "Preparing": C.YELLOW,
         "Confirmed": C.GREEN,
@@ -180,7 +208,7 @@ def status_badge(status: str) -> str:
         "Cancelled": C.RED,
     }
     color = colors.get(status, C.WHITE)
-    return f"{color}{C.BOLD}{status}{C.RESET}"
+    return f"{color}{C.BOLD}● {status}{C.RESET}"
 
 def seat_bar(available: int, total: int, width: int = 20) -> str:
     """Visual bar showing seat occupancy"""

@@ -198,11 +198,12 @@ class Restaurant:
 class CartItem:
     """Represents an item in the cart"""
     
-    def __init__(self, name: str, price: int, quantity: int, restaurant: str):
+    def __init__(self, name: str, price: int, quantity: int, restaurant: str, item_number: str = ""):
         self.name = name
         self.price = price
         self.quantity = quantity
         self.restaurant = restaurant
+        self.item_number = item_number
     
     @property
     def total(self) -> int:
@@ -213,7 +214,8 @@ class CartItem:
             "name": self.name,
             "price": self.price,
             "quantity": self.quantity,
-            "restaurant": self.restaurant
+            "restaurant": self.restaurant,
+            "item_number": self.item_number,
         }
 
 class Cart:
@@ -222,18 +224,18 @@ class Cart:
     def __init__(self):
         self.items: List[CartItem] = []
     
-    def add_item(self, item: FoodItem, restaurant_name: str, quantity: int = 1) -> bool:
+    def add_item(self, item: FoodItem, restaurant_name: str, quantity: int = 1, item_number: str = "") -> bool:
         if quantity <= 0:
             return False
         for cart_item in self.items:
-            if cart_item.name == item.name and cart_item.restaurant == restaurant_name:
+            if cart_item.item_number == item_number and cart_item.restaurant == restaurant_name:
                 if cart_item.quantity + quantity <= item.stock:
                     cart_item.quantity += quantity
                     return True
                 return False
         
         if quantity <= item.stock:
-            self.items.append(CartItem(item.name, item.price, quantity, restaurant_name))
+            self.items.append(CartItem(item.name, item.price, quantity, restaurant_name, item_number))
             return True
         return False
     

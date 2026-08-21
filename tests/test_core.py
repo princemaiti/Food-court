@@ -3,7 +3,7 @@ from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from models import Cart, Coupon, FoodItem, User
+from models import Cart, Coupon, FoodItem, Restaurant, User
 from services import FoodCourtService
 from ui import C, _menu_label, _visible_length, menu_box
 
@@ -78,6 +78,20 @@ class UITests(unittest.TestCase):
 
         rows = output.getvalue().splitlines()
         self.assertTrue(all(_visible_length(row) == 40 for row in rows))
+
+    def test_restaurant_metadata_survives_model_loading(self):
+        restaurant = Restaurant.from_dict("Cafe", {
+            "emoji": "🍵",
+            "total_seats": 12,
+            "cuisine": "Cafe",
+            "description": "Fresh drinks and snacks",
+            "opening_hours": "9:00 AM - 9:00 PM",
+            "service_style": "Counter service",
+        })
+
+        self.assertEqual(restaurant.cuisine, "Cafe")
+        self.assertEqual(restaurant.opening_hours, "9:00 AM - 9:00 PM")
+        self.assertEqual(restaurant.service_style, "Counter service")
 
 
 class CouponTests(unittest.TestCase):

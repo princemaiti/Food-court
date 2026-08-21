@@ -148,11 +148,17 @@ class FoodItem:
 class Restaurant:
     """Represents a restaurant"""
     
-    def __init__(self, name: str, emoji: str = "🍽️", total_seats: int = 20):
+    def __init__(self, name: str, emoji: str = "🍽️", total_seats: int = 20,
+                 cuisine: str = "Multi-cuisine", description: str = "",
+                 opening_hours: str = "11:00 AM - 11:00 PM", service_style: str = "Dine-in"):
         self.name = name
         self.emoji = emoji
         self.total_seats = total_seats
         self.available_seats = total_seats
+        self.cuisine = cuisine
+        self.description = description
+        self.opening_hours = opening_hours
+        self.service_style = service_style
         self.menu: Dict[str, FoodItem] = {}
     
     def add_item(self, item: FoodItem) -> str:
@@ -188,7 +194,11 @@ class Restaurant:
         restaurant = cls(
             name=name,
             emoji=data.get("emoji", "🍽️"),
-            total_seats=data.get("total_seats", 20)
+            total_seats=data.get("total_seats", 20),
+            cuisine=data.get("cuisine", "Multi-cuisine"),
+            description=data.get("description", ""),
+            opening_hours=data.get("opening_hours", "11:00 AM - 11:00 PM"),
+            service_style=data.get("service_style", "Dine-in")
         )
         restaurant.available_seats = data.get("available_seats", restaurant.total_seats)
         for num, item_data in data.get("menu", {}).items():

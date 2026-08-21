@@ -128,6 +128,9 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
             restaurants = self.service.get_restaurants()
             for index, (name, restaurant) in enumerate(restaurants, 1):
                 print(f"{C.YELLOW}{index}.{C.RESET} {restaurant.emoji} {C.BOLD}{name}{C.RESET}")
+                print(f"     {C.GREY}{restaurant.cuisine} | {restaurant.opening_hours} | {restaurant.service_style}{C.RESET}")
+                if restaurant.description:
+                    print(f"     {C.WHITE}{restaurant.description}{C.RESET}")
                 print(f"     {seat_bar(restaurant.available_seats, restaurant.total_seats)}")
             
             print(f"\n{C.GREY}0. Back{C.RESET}")
@@ -154,7 +157,7 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
             for num, item in restaurant.menu.items():
                 status = "SOLD OUT" if item.stock <= 0 else f"{item.stock} left"
                 print(f"{C.YELLOW}{num}.{C.RESET} {item.name} - {money(item.price)}")
-                print(f"   {C.GREY}{item.description} | {status} | ⭐ {item.rating}{C.RESET}")
+                print(f"   {C.GREY}{item.description} | {item.category} | {status} | ⭐ {item.rating}{C.RESET}")
             
             print(f"\n{C.GREY}0. Back{C.RESET}")
             choice = input(f"\n{C.CYAN}Enter dish number to add: {C.RESET}").strip()

@@ -25,7 +25,11 @@ class Database:
         
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if self._enrich_catalog(data):
+                self.data = data
+                self.save()
+            return data
         except (json.JSONDecodeError, OSError):
             self._preserve_corrupt_data()
             warn("Data file corrupted. A copy was preserved in backups; creating fresh database.")
@@ -58,7 +62,10 @@ class Database:
             "reviews": [],
             "coupons": [
                 {"code": "SAVE10", "type": "percent", "value": 10, "description": "10% off order"},
-                {"code": "FLAT50", "type": "flat", "value": 50, "description": "₹50 off order"}
+                {"code": "FLAT50", "type": "flat", "value": 50, "description": "₹50 off order"},
+                {"code": "WELCOME20", "type": "percent", "value": 20, "description": "20% off your first order"},
+                {"code": "FEAST100", "type": "flat", "value": 100, "description": "₹100 off orders above ₹700"},
+                {"code": "WEEKEND15", "type": "percent", "value": 15, "description": "15% weekend food festival offer"}
             ],
             "announcements": [
                 "🎉 Welcome to Alakh Da Dhaaba!",
@@ -82,7 +89,7 @@ class Database:
     
     def _get_default_restaurants(self) -> Dict:
         """Get default restaurant data"""
-        return {
+        restaurants = {
             "Pizza Palace": {
                 "emoji": "🍕",
                 "total_seats": 20,
@@ -152,6 +159,244 @@ class Database:
                 }
             }
         }
+        self._enrich_catalog({"restaurants": restaurants})
+        return restaurants
+
+    def _enrich_catalog(self, data: Dict) -> bool:
+        """Expand each branch with a varied menu while preserving existing records."""
+        restaurants = data.setdefault("restaurants", {})
+        new_branches = {
+            "Tandoor Terrace": ("🔥", 35, "North Indian", "Live-fire tandoor favourites and smoky grills.", "12:00 PM - 11:30 PM", "Dine-in / Takeaway"),
+            "Dosa Junction": ("🥞", 28, "South Indian", "Crisp dosas, comforting idlis and filter coffee.", "8:00 AM - 10:30 PM", "Quick service"),
+            "Sweet Truth": ("🍨", 22, "Desserts & Cafe", "A relaxed dessert cafe for sweet celebrations.", "11:00 AM - 12:00 AM", "Cafe / Takeaway"),
+        }
+        changed = False
+        for name, (emoji, seats, cuisine, description, opening_hours, service_style) in new_branches.items():
+            if name not in restaurants:
+                restaurants[name] = {
+                    "emoji": emoji,
+                    "total_seats": seats,
+                    "available_seats": seats,
+                    "cuisine": cuisine,
+                    "description": description,
+                    "opening_hours": opening_hours,
+                    "service_style": service_style,
+                    "menu": {},
+                }
+                changed = True
+
+        menu_sets = {
+            "Pizza Palace": [
+                ("Tandoori Paneer Pizza", 239, "Fast Food", "Smoky paneer, onion and capsicum"),
+                ("Corn & Cheese Pizza", 189, "Fast Food", "Sweet corn with a creamy cheese blend"),
+                ("Pesto Veg Pizza", 259, "Fast Food", "Basil pesto with roasted vegetables"),
+                ("Jalapeno Popper Pizza", 249, "Fast Food", "Creamy cheese and fiery jalapenos"),
+                ("Cheesy Pasta Bake", 179, "Pasta", "Oven baked pasta in rich tomato sauce"),
+                ("Arrabbiata Pasta", 159, "Pasta", "Spicy tomato pasta with herbs"),
+                ("Loaded Potato Wedges", 139, "Sides", "Crispy wedges with cheese dip"),
+                ("Lemon Iced Tea", 79, "Beverages", "Bright and refreshing house iced tea"),
+                ("Mango Smoothie", 119, "Beverages", "Thick seasonal mango smoothie"),
+                ("Tiramisu Cup", 159, "Desserts", "Coffee soaked cream and cocoa layers"),
+            ],
+            "Wok Express": [
+                ("Burnt Garlic Noodles", 149, "Chinese", "Noodles tossed with crisp garlic"),
+                ("Schezwan Noodles", 159, "Chinese", "Hot wok noodles with schezwan sauce"),
+                ("Kung Pao Paneer", 189, "Chinese", "Paneer, peanuts and peppers in wok sauce"),
+                ("Crispy Corn", 129, "Chinese", "Crunchy corn with chilli and spring onion"),
+                ("Veg Manchow Soup", 109, "Soups", "Spicy soup topped with fried noodles"),
+                ("Sweet Corn Soup", 99, "Soups", "Comforting soup with sweet corn"),
+                ("Thai Green Curry", 219, "Thai", "Fragrant coconut curry with vegetables"),
+                ("Pad Thai Noodles", 199, "Thai", "Tamarind noodles with peanuts"),
+                ("Chilli Garlic Rice", 149, "Chinese", "Aromatic rice with garlic and chilli"),
+                ("Mango Bubble Tea", 139, "Beverages", "Chilled mango tea with chewy pearls"),
+            ],
+            "Spice Hub": [
+                ("Chole Bhature", 149, "Indian", "Spiced chickpeas with fluffy bhature"),
+                ("Rajma Chawal", 139, "Indian", "Slow cooked kidney beans with rice"),
+                ("Kadhai Paneer", 199, "Indian", "Paneer with peppers in aromatic masala"),
+                ("Malai Kofta", 209, "Indian", "Soft kofta in creamy tomato gravy"),
+                ("Tandoori Roti", 29, "Indian", "Clay oven baked whole wheat bread"),
+                ("Garlic Naan", 69, "Indian", "Tandoor naan topped with garlic"),
+                ("Veg Seekh Kebab", 179, "Starters", "Smoky minced vegetable kebabs"),
+                ("Hara Bhara Kebab", 159, "Starters", "Spinach and pea kebabs"),
+                ("Mango Lassi", 89, "Beverages", "Chilled yoghurt drink with mango"),
+                ("Rasmalai", 99, "Desserts", "Soft cheese dumplings in saffron milk"),
+            ],
+            "Burger Point": [
+                ("BBQ Paneer Burger", 169, "Fast Food", "Grilled paneer with smoky BBQ sauce"),
+                ("Mushroom Melt Burger", 179, "Fast Food", "Savoury mushrooms and melted cheese"),
+                ("Spicy Mexican Burger", 159, "Fast Food", "Jalapeno salsa and crunchy patty"),
+                ("Crispy Corn Burger", 129, "Fast Food", "Golden corn patty with fresh lettuce"),
+                ("Classic Veg Wrap", 119, "Wraps", "Seasoned vegetables in a soft wrap"),
+                ("Paneer Tikka Wrap", 159, "Wraps", "Tandoori paneer with mint dressing"),
+                ("Chilli Cheese Toast", 109, "Sides", "Toasted bread with cheese and chilli"),
+                ("Masala Lemonade", 69, "Beverages", "Zesty lemonade with Indian spices"),
+                ("Strawberry Shake", 139, "Beverages", "Creamy strawberry milkshake"),
+                ("Choco Lava Cake", 129, "Desserts", "Warm cake with a molten centre"),
+            ],
+            "taj hotel": [
+                ("Royal Paneer Platter", 349, "Fine Dining", "Chef selection of paneer specialities"),
+                ("Awadhi Veg Biryani", 299, "Fine Dining", "Fragrant rice with saffron and vegetables"),
+                ("Dal Bukhara", 269, "Fine Dining", "Slow simmered black lentils"),
+                ("Mughlai Vegetable Korma", 289, "Fine Dining", "Vegetables in a rich nut gravy"),
+                ("Tandoori Mushroom", 229, "Starters", "Charred mushrooms with smoky spices"),
+                ("Stuffed Tandoori Aloo", 219, "Starters", "Potatoes filled with spiced cheese"),
+                ("Roomali Roti", 49, "Indian", "Thin handkerchief-style bread"),
+                ("Saffron Lassi", 119, "Beverages", "Silky yoghurt with saffron"),
+                ("Rose Falooda", 159, "Beverages", "Rose milk with basil seeds and ice cream"),
+                ("Royal Shahi Tukda", 179, "Desserts", "Bread pudding with rabri and nuts"),
+            ],
+            "Tandoor Terrace": [
+                ("Paneer Tikka", 219, "Tandoor", "Char-grilled paneer with peppers"),
+                ("Achari Soya Chaap", 199, "Tandoor", "Tangy pickled spice soya chaap"),
+                ("Tandoori Broccoli", 189, "Tandoor", "Charred broccoli with creamy marinade"),
+                ("Dahi Ke Kebab", 179, "Starters", "Crisp yoghurt kebabs with herbs"),
+                ("Afghani Paneer", 239, "Tandoor", "Mild creamy paneer tikka"),
+                ("Tandoori Platter", 399, "Combos", "A generous mix of house tandoor favourites"),
+                ("Dal Tadka", 139, "Indian", "Yellow lentils tempered with garlic"),
+                ("Jeera Pulao", 119, "Indian", "Basmati rice with toasted cumin"),
+                ("Mint Chaas", 69, "Beverages", "Cool spiced buttermilk with mint"),
+                ("Kulfi Falooda", 149, "Desserts", "Traditional kulfi with falooda"),
+            ],
+            "Dosa Junction": [
+                ("Mysore Masala Dosa", 139, "South Indian", "Crisp dosa with spicy red chutney"),
+                ("Paneer Dosa", 169, "South Indian", "Dosa filled with masala paneer"),
+                ("Cheese Corn Dosa", 159, "South Indian", "Fusion dosa with corn and cheese"),
+                ("Onion Uttapam", 109, "South Indian", "Thick savoury pancake with onion"),
+                ("Podi Idli", 89, "South Indian", "Steamed idlis tossed in gunpowder spice"),
+                ("Medu Vada", 99, "South Indian", "Crisp lentil fritters with sambar"),
+                ("Mini Idli Sambar", 89, "South Indian", "Soft bite-sized idlis in sambar"),
+                ("Filter Coffee", 69, "Beverages", "South Indian coffee brewed traditionally"),
+                ("Tender Coconut Cooler", 99, "Beverages", "Refreshing coconut and lime drink"),
+                ("Kesari Bath", 79, "Desserts", "Warm semolina sweet with saffron"),
+            ],
+            "Sweet Truth": [
+                ("Belgian Waffle", 179, "Desserts", "Crisp waffle with chocolate drizzle"),
+                ("Classic Cheesecake", 199, "Desserts", "Silky baked cheesecake slice"),
+                ("Brownie Sundae", 189, "Desserts", "Warm brownie, ice cream and sauce"),
+                ("Red Velvet Pastry", 149, "Desserts", "Velvety sponge with cream cheese"),
+                ("Gulab Jamun Sundae", 159, "Desserts", "Warm gulab jamun with vanilla ice cream"),
+                ("Fruit Cream", 129, "Desserts", "Seasonal fruits folded through cream"),
+                ("Oreo Thick Shake", 169, "Beverages", "Rich cookie shake with whipped cream"),
+                ("Cold Cocoa", 119, "Beverages", "Chilled cocoa with a smooth finish"),
+                ("Classic Hot Chocolate", 129, "Beverages", "Warm chocolate topped with foam"),
+                ("Pistachio Ice Cream", 99, "Ice Cream", "Creamy roasted pistachio scoop"),
+            ],
+        }
+        menu_sets.update({
+            "taj hotel": [
+                ("Nawabi Veg Galouti", 249, "Starters", "Melt-in-the-mouth vegetarian kebab"),
+                ("Kashmiri Dum Aloo", 229, "Fine Dining", "Baby potatoes in saffron gravy"),
+                ("Paneer Lababdar", 279, "Fine Dining", "Paneer in a silky tomato sauce"),
+                ("Subz Handi", 259, "Fine Dining", "Seasonal vegetables in a clay pot"),
+                ("Truffle Mushroom Bites", 299, "Starters", "Mushrooms finished with truffle oil"),
+                ("Herbed Rice Pilaf", 189, "Sides", "Fragrant rice with garden herbs"),
+                ("Cucumber Mint Cooler", 109, "Beverages", "Fresh cucumber, mint and lime"),
+                ("Kesar Badam Milk", 139, "Beverages", "Chilled almond milk with saffron"),
+                ("Baked Rasgulla", 149, "Desserts", "Soft rasgulla baked with cream"),
+                ("Chocolate Hazelnut Tart", 219, "Desserts", "Crisp tart with hazelnut chocolate"),
+            ],
+            "Tandoor Terrace": [
+                ("Tandoori Pineapple", 169, "Tandoor", "Sweet pineapple with smoky spice"),
+                ("Bharwan Tandoori Aloo", 189, "Tandoor", "Stuffed potatoes from the clay oven"),
+                ("Soya Chaap Tikka", 209, "Tandoor", "Tender chaap with mint marinade"),
+                ("Paneer Kali Mirch", 229, "Tandoor", "Peppery cream-marinated paneer"),
+                ("Tandoori Momos", 179, "Starters", "Momos finished over charcoal"),
+                ("Smoked Corn Chaat", 129, "Starters", "Charred corn with lime and masala"),
+                ("Butter Dal", 159, "Indian", "Creamy lentils finished with butter"),
+                ("Basket of Tandoori Breads", 139, "Indian", "Assorted fresh breads from the tandoor"),
+                ("Aam Panna", 79, "Beverages", "Tart raw mango summer cooler"),
+                ("Jalebi with Rabri", 139, "Desserts", "Crisp jalebi with chilled rabri"),
+            ],
+            "Dosa Junction": [
+                ("Ghee Roast Dosa", 149, "South Indian", "Extra crisp dosa roasted in ghee"),
+                ("Cheese Masala Dosa", 179, "South Indian", "Masala dosa with melted cheese"),
+                ("Ragi Dosa", 119, "South Indian", "Nutritious crisp finger millet dosa"),
+                ("Pesarattu", 129, "South Indian", "Green gram crepe with ginger"),
+                ("Thatte Idli", 99, "South Indian", "Soft plate-style idli with chutney"),
+                ("Kanchipuram Idli", 109, "South Indian", "Pepper and cashew tempered idli"),
+                ("Bisi Bele Bath", 139, "South Indian", "Comforting rice and lentil dish"),
+                ("Lemon Rice", 99, "South Indian", "Tangy rice with peanuts and curry leaves"),
+                ("Rose Milk", 79, "Beverages", "Chilled rose-flavoured milk"),
+                ("Mysore Pak", 89, "Desserts", "Traditional gram flour and ghee sweet"),
+            ],
+            "Sweet Truth": [
+                ("Blueberry Cheesecake", 229, "Desserts", "Creamy cheesecake with blueberry topping"),
+                ("Lotus Biscoff Cheesecake", 249, "Desserts", "Caramel biscuit cheesecake slice"),
+                ("Chocolate Mousse", 159, "Desserts", "Airy dark chocolate mousse"),
+                ("Panna Cotta", 179, "Desserts", "Silky vanilla cream with berry sauce"),
+                ("Sizzling Brownie", 219, "Desserts", "Hot brownie on a sizzling plate"),
+                ("Nutella Crepe", 189, "Desserts", "Thin crepe filled with chocolate hazelnut"),
+                ("Mango Frappe", 159, "Beverages", "Blended mango and cream frappe"),
+                ("Caramel Macchiato", 149, "Beverages", "Coffee with steamed milk and caramel"),
+                ("Cookies and Cream Sundae", 179, "Ice Cream", "Vanilla ice cream with cookie crunch"),
+                ("Dry Fruit Kulfi", 129, "Ice Cream", "Traditional kulfi with roasted nuts"),
+            ],
+        })
+        for restaurant_name, items in menu_sets.items():
+            restaurant = restaurants.get(restaurant_name)
+            if not restaurant:
+                continue
+            menu = restaurant.setdefault("menu", {})
+            for item_name, price, category, description in items:
+                if any(item.get("name") == item_name for item in menu.values()):
+                    continue
+                number = str(max((int(key) for key in menu if str(key).isdigit()), default=0) + 1)
+                menu[number] = {
+                    "name": item_name,
+                    "price": price,
+                    "category": category,
+                    "description": description,
+                    "stock": 18 + (len(menu) % 4) * 7,
+                    "rating": round(4.0 + (len(menu) % 10) / 10, 1),
+                    "sold_out": False,
+                }
+                changed = True
+        branch_metadata = {
+            "Pizza Palace": ("Italian & Fast Food", "Hand-stretched pizzas, baked sides and chilled drinks.", "11:00 AM - 11:30 PM", "Dine-in / Takeaway"),
+            "Wok Express": ("Chinese & Thai", "Fast wok cooking with noodles, rice and bright sauces.", "12:00 PM - 11:00 PM", "Quick service"),
+            "Spice Hub": ("Indian Vegetarian", "Classic Indian comfort food with family-style portions.", "10:00 AM - 11:00 PM", "Dine-in / Takeaway"),
+            "Burger Point": ("Burgers & Snacks", "Casual burgers, wraps, shakes and loaded sides.", "11:00 AM - 12:00 AM", "Quick service"),
+            "taj hotel": ("Luxury Indian", "An elevated vegetarian dining experience with royal flavours.", "7:00 AM - 11:30 PM", "Fine dining"),
+        }
+        for name, (cuisine, description, opening_hours, service_style) in branch_metadata.items():
+            restaurant = restaurants.get(name)
+            if not restaurant:
+                continue
+            for key, value in (("cuisine", cuisine), ("description", description), ("opening_hours", opening_hours), ("service_style", service_style)):
+                if restaurant.get(key) != value:
+                    restaurant[key] = value
+                    changed = True
+        for restaurant in restaurants.values():
+            for item in restaurant.get("menu", {}).values():
+                category = item.get("category", "General")
+                dietary = "Contains dairy" if any(word in item.get("name", "").lower() for word in ("paneer", "cheese", "cream", "butter", "lassi", "shake", "ice cream", "naan")) else "Vegetarian"
+                preparation = 8 + (len(item.get("name", "")) % 6) * 2
+                metadata = {"dietary": dietary, "prep_time": preparation, "popular": item.get("rating", 0) >= 4.5}
+                for key, value in metadata.items():
+                    if item.get(key) != value:
+                        item[key] = value
+                        changed = True
+        coupon_codes = {coupon.get("code", "").upper() for coupon in data.setdefault("coupons", [])}
+        for coupon in [
+            {"code": "WELCOME20", "type": "percent", "value": 20, "description": "20% off your first order"},
+            {"code": "FEAST100", "type": "flat", "value": 100, "description": "₹100 off orders above ₹700"},
+            {"code": "WEEKEND15", "type": "percent", "value": 15, "description": "15% weekend food festival offer"},
+        ]:
+            if coupon["code"] not in coupon_codes:
+                data["coupons"].append(coupon)
+                coupon_codes.add(coupon["code"])
+                changed = True
+        announcements = data.setdefault("announcements", [])
+        for announcement in [
+            "🍽️ New branches are now serving all-day favourites.",
+            "🎁 Use WELCOME20 on your first order at the expanded food court.",
+            "🌶️ Chef specials rotate regularly - check every menu for something new.",
+        ]:
+            if announcement not in announcements:
+                announcements.append(announcement)
+                changed = True
+        return changed
     
     def backup(self) -> str:
         """Create data backup"""

@@ -19,6 +19,7 @@ user_portal.py user navigation loop
 admin_portal.py admin navigation loop
 services.py   business workflows and validation
 auth_service.py authentication and session workflows
+order_service.py order placement, status, refunds, and receipts
 models.py     domain objects and invariants
 database.py   JSON persistence, backups, and activity logs
 ui.py         terminal rendering helpers

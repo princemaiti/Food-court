@@ -198,12 +198,13 @@ class Restaurant:
 class CartItem:
     """Represents an item in the cart"""
     
-    def __init__(self, name: str, price: int, quantity: int, restaurant: str, item_number: str = ""):
+    def __init__(self, name: str, price: int, quantity: int, restaurant: str, item_number: str = "", max_quantity: int = 0):
         self.name = name
         self.price = price
         self.quantity = quantity
         self.restaurant = restaurant
         self.item_number = item_number
+        self.max_quantity = max_quantity
     
     @property
     def total(self) -> int:
@@ -235,7 +236,7 @@ class Cart:
                 return False
         
         if quantity <= item.stock:
-            self.items.append(CartItem(item.name, item.price, quantity, restaurant_name, item_number))
+            self.items.append(CartItem(item.name, item.price, quantity, restaurant_name, item_number, item.stock))
             return True
         return False
     
@@ -249,6 +250,8 @@ class Cart:
         if 0 <= index < len(self.items):
             if new_quantity <= 0:
                 return self.remove_item(index)
+            if self.items[index].max_quantity and new_quantity > self.items[index].max_quantity:
+                return False
             self.items[index].quantity = new_quantity
             return True
         return False

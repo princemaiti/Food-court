@@ -38,6 +38,16 @@ class CartTests(unittest.TestCase):
         self.assertTrue(cart.update_quantity(0, 0))
         self.assertEqual(cart.items, [])
 
+    def test_cannot_change_quantity_above_available_stock(self):
+        cart = Cart()
+        item = FoodItem("Soup", 80, stock=3)
+        cart.add_item(item, "Cafe", 2, "1")
+
+        self.assertFalse(cart.update_quantity(0, 4))
+        self.assertEqual(cart.items[0].quantity, 2)
+        self.assertTrue(cart.update_quantity(0, 3))
+        self.assertEqual(cart.items[0].quantity, 3)
+
     def test_same_named_items_from_different_menu_entries_stay_separate(self):
         cart = Cart()
         first = FoodItem("Special", 80, stock=5)
@@ -164,6 +174,15 @@ class ServiceTests(unittest.TestCase):
         self.assertIn("greater than zero", message)
         self.assertEqual(self.user.wallet, 100)
         self.assertEqual(self.database.saved, 0)
+
+    def test_unknown_coupon_rejects_order(self):
+        self.service.cart.add_item(FoodItem("Soup", 80, stock=5), "Cafe", 1, "1")
+
+        success, message, order = self.service.place_order("UNKNOWN")
+
+        self.assertFalse(success)
+        self.assertIn("not found", message)
+        self.assertIsNone(order)
 
     def test_order_status_must_follow_flow(self):
         success, _ = self.service.update_order_status("ALD1", "Delivered")

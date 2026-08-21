@@ -8,8 +8,9 @@ from models import User, Restaurant, FoodItem, Cart, Order, Reservation, Review,
 from database import Database
 from config import POINTS_PER_RUPEE, RECEIPT_DIR
 from auth_service import AuthServiceMixin
+from order_service import OrderServiceMixin
 
-class FoodCourtService(AuthServiceMixin):
+class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
     """Main business logic"""
     
     def __init__(self):
@@ -121,13 +122,17 @@ class FoodCourtService(AuthServiceMixin):
         coupon_applied = None
         
         if coupon_code:
+            coupon_found = False
             for coupon_data in self.db.data.get("coupons", []):
                 if coupon_data["code"].upper() == coupon_code.upper():
+                    coupon_found = True
                     coupon = Coupon(coupon_data["code"], coupon_data["type"], 
                                    coupon_data["value"], coupon_data["description"])
                     total, discount = coupon.apply(total)
                     coupon_applied = coupon.code
                     break
+            if not coupon_found:
+                return False, "Coupon code not found", None
 
         for cart_item in self.cart.items:
             restaurant_data = self.db.data["restaurants"].get(cart_item.restaurant)
@@ -586,3 +591,11 @@ class FoodCourtService(AuthServiceMixin):
             "restaurant_count": len(self.db.data.get("restaurants", {})),
             "review_count": len(self.db.data.get("reviews", [])),
         }
+
+
+# Keep the public service API stable while order workflows live in order_service.
+FoodCourtService.place_order = OrderServiceMixin.place_order
+FoodCourtService.cancel_order = OrderServiceMixin.cancel_order
+FoodCourtService.update_order_status = OrderServiceMixin.update_order_status
+FoodCourtService.update_order_item_quantity = OrderServiceMixin.update_order_item_quantity
+FoodCourtService.generate_receipt = OrderServiceMixin.generate_receipt

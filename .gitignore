@@ -6,7 +6,10 @@ __pycache__/
 # Runtime data generated locally
 data/log.json
 receipts/*.txt
-backups/*.json# Byte-compiled / optimized / DLL files
+backups/*.json
+data/stress_food_court.json
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class

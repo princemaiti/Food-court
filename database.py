@@ -51,6 +51,22 @@ class Database:
         os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=4, ensure_ascii=False)
+
+    def get_user(self, username: str) -> Dict:
+        """Return one user record without requiring callers to know storage details."""
+        return self.data.get("users", {}).get(username, {})
+
+    def get_order(self, order_id: str) -> Dict:
+        """Return one order by its stable identifier."""
+        return next((order for order in self.data.get("orders", []) if order.get("id") == order_id), {})
+
+    def get_restaurant(self, name: str) -> Dict:
+        """Return one restaurant record by its legacy display name."""
+        return self.data.get("restaurants", {}).get(name, {})
+
+    def get_orders_by_user(self, username: str) -> list:
+        """Return orders belonging to one user."""
+        return [order for order in self.data.get("orders", []) if order.get("username") == username]
     
     def _create_default_data(self) -> Dict:
         """Create default data structure"""
@@ -385,6 +401,7 @@ class Database:
             self._enhance_customer_history(data)
             data["customer_history_enhanced"] = True
             changed = True
+        changed = self._add_stable_ids(data) or changed
         for coupon in data.setdefault("coupons", []):
             if "used_by" not in coupon:
                 coupon["used_by"] = []
@@ -410,6 +427,46 @@ class Database:
                 changed = True
         for order in data.get("orders", []):
             if order.pop("demo_data", None) is not None:
+                changed = True
+        return changed
+
+    def _add_stable_ids(self, data: Dict) -> bool:
+        """Add durable IDs and relationship fields while preserving old JSON keys."""
+        changed = False
+        for index, (username, user) in enumerate(data.get("users", {}).items(), 1):
+            if "user_id" not in user:
+                user["user_id"] = f"user_{index:06d}"
+                changed = True
+        for index, (name, restaurant) in enumerate(data.get("restaurants", {}).items(), 1):
+            if "restaurant_id" not in restaurant:
+                restaurant["restaurant_id"] = f"restaurant_{index:06d}"
+                changed = True
+            for item_index, (item_number, item) in enumerate(restaurant.get("menu", {}).items(), 1):
+                if "food_id" not in item:
+                    item["food_id"] = f"food_{index:06d}_{item_index:03d}"
+                    changed = True
+        user_ids = {username: user.get("user_id") for username, user in data.get("users", {}).items()}
+        restaurant_ids = {name: restaurant.get("restaurant_id") for name, restaurant in data.get("restaurants", {}).items()}
+        for order in data.get("orders", []):
+            if "order_id" not in order:
+                order["order_id"] = order.get("id")
+                changed = True
+            if "user_id" not in order:
+                order["user_id"] = user_ids.get(order.get("username"))
+                changed = True
+            for item in order.get("items", []):
+                if "restaurant_id" not in item:
+                    item["restaurant_id"] = restaurant_ids.get(item.get("restaurant"))
+                    changed = True
+        for reservation in data.get("reservations", []):
+            if "reservation_id" not in reservation:
+                reservation["reservation_id"] = reservation.get("id")
+                changed = True
+            if "user_id" not in reservation:
+                reservation["user_id"] = user_ids.get(reservation.get("username"))
+                changed = True
+            if "restaurant_id" not in reservation:
+                reservation["restaurant_id"] = restaurant_ids.get(reservation.get("restaurant"))
                 changed = True
         return changed
 

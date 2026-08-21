@@ -47,12 +47,18 @@ class OrderServiceMixin:
         order_id = f"ALD{self.db.data['next_order_id']}"
         self.db.data["next_order_id"] += 1
         order = Order(order_id, self.current_user.username, self.cart.to_list(), total)
+        order_data = order.to_dict()
+        order_data["order_id"] = order_id
+        order_data["user_id"] = user_data.get("user_id")
+        for item_data in order_data["items"]:
+            menu_item = self._find_menu_item(item_data["restaurant"], item_data.get("item_number", ""), item_data["name"])
+            restaurant_data = self.db.data.get("restaurants", {}).get(item_data["restaurant"], {})
+            item_data["restaurant_id"] = restaurant_data.get("restaurant_id")
+            if menu_item is not None:
+                item_data["food_id"] = menu_item.get("food_id")
         if coupon_code:
             coupon_data["used_by"].append(self.current_user.username)
-            order_data = order.to_dict()
             order_data["coupon_code"] = coupon_data["code"].upper()
-        else:
-            order_data = order.to_dict()
         user_data["wallet"] -= total
         user_data["food_points"] = user_data.get("food_points", 0) + total // POINTS_PER_RUPEE
         self._update_stock_after_order()

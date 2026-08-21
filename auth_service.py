@@ -21,7 +21,9 @@ class AuthServiceMixin:
             return False, "Username already exists"
 
         user = User(username, name, password)
-        self.db.data["users"][username] = user.to_dict()
+        user_data = user.to_dict()
+        user_data["user_id"] = f"user_{len(self.db.data['users']) + 1:06d}"
+        self.db.data["users"][username] = user_data
         self.db.log_activity("user_registered", username)
         self.db.save()
         return True, "Account created successfully"

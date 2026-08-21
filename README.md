@@ -25,6 +25,7 @@ database.py   JSON persistence, backups, and activity logs
 ui.py         terminal rendering helpers
 config.py     paths and application constants
 tests/        standard-library regression tests
+stress_test.py isolated synthetic-data generator for scale experiments
 ```
 
 The CLI calls services for state changes. Services update models and persistence; UI
@@ -39,6 +40,18 @@ reservation, restaurant, and admin service modules as those workflows grow.
 - Backups should be created before manual data editing or experimental changes.
 - Admin credentials should be moved to an environment variable or secret store before
 	deploying beyond a local classroom/demo environment.
+
+## Scale Testing
+
+Generate an isolated large dataset without changing the live application data:
+
+```bash
+py stress_test.py
+```
+
+Use `--users`, `--restaurants`, `--foods`, `--orders`, and `--reviews` to customize
+the volume. Set `FOODCOURT_ADMIN_USERNAME` and `FOODCOURT_ADMIN_PASSWORD` in the
+environment to replace the local development admin credentials.
 
 **License:** MIT
 

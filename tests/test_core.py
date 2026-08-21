@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from models import Cart, Coupon, FoodItem, Restaurant, User
 from services import FoodCourtService
-from ui import C, _menu_label, _visible_length, announcement_card, menu_box, panel, restaurant_card
+from database import Database
+from ui import C, _menu_label, _visible_length, announcement_card, menu_box, panel, restaurant_card, safe_icon
 
 
 class FakeDatabase:
@@ -67,9 +68,16 @@ class UITests(unittest.TestCase):
         self.assertEqual(_visible_length("👨‍🍳"), 2)
 
     def test_menu_labels_have_consistent_icon_spacing(self):
-        self.assertEqual(_menu_label("🍔 Browse Food"), "🍔  Browse Food")
+        self.assertEqual(_visible_length(_menu_label("🍔 Browse Food")), 15)
         self.assertEqual(_menu_label("Logout"), "Logout")
         self.assertEqual(_menu_label("Manage Users"), "Manage Users")
+
+    def test_icons_use_high_contrast_terminal_symbols(self):
+        self.assertIn("🍔", safe_icon("🍔"))
+        self.assertIn("🔔", safe_icon("🔔"))
+        self.assertNotIn("48;5", safe_icon("🍔"))
+        self.assertEqual(_visible_length(safe_icon("🍔")), 2)
+        self.assertEqual(_visible_length(_menu_label("📢  NOTIFICATIONS")), 17)
 
     def test_menu_box_rows_keep_their_border_alignment(self):
         output = StringIO()
@@ -109,6 +117,15 @@ class UITests(unittest.TestCase):
 
         bordered_lines = output.getvalue().splitlines()
         self.assertTrue(all(_visible_length(line) == 40 for line in bordered_lines))
+
+    def test_bordered_components_share_a_minimum_width(self):
+        output = StringIO()
+        with patch("ui.get_width", return_value=20), patch("sys.stdout", output):
+            menu_box([("1", "🍔 Browse Food")])
+            panel("🔔 ALERT", ["Short message"])
+
+        bordered_lines = output.getvalue().splitlines()
+        self.assertTrue(all(_visible_length(line) == 32 for line in bordered_lines))
 
 
 class CouponTests(unittest.TestCase):
@@ -216,6 +233,29 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertIn("not found", message)
         self.assertIsNone(order)
+
+    def test_review_requires_a_matching_order(self):
+        self.database.data["restaurants"] = {"Cafe": {"menu": {}}}
+
+        success, message = self.service.add_review("Cafe", 5, "Great food")
+
+        self.assertFalse(success)
+        self.assertIn("only after ordering", message)
+
+    def test_stable_ids_and_relationships_are_added_to_legacy_records(self):
+        database = Database.__new__(Database)
+        data = {
+            "users": {"tester": {}},
+            "restaurants": {"Cafe": {"menu": {"1": {"name": "Soup"}}}},
+            "orders": [{"id": "ALD1", "username": "tester", "items": [{"restaurant": "Cafe"}]}],
+            "reservations": [{"id": "RES1", "username": "tester", "restaurant": "Cafe"}],
+        }
+
+        self.assertTrue(database._add_stable_ids(data))
+        self.assertEqual(data["orders"][0]["order_id"], "ALD1")
+        self.assertEqual(data["orders"][0]["user_id"], "user_000001")
+        self.assertEqual(data["orders"][0]["items"][0]["restaurant_id"], "restaurant_000001")
+        self.assertEqual(data["reservations"][0]["reservation_id"], "RES1")
 
     def test_coupon_can_only_be_used_once_by_each_user(self):
         self.database.data["restaurants"] = {

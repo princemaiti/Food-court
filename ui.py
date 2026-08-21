@@ -30,6 +30,10 @@ if os.name == "nt":
 
 C = Colors()
 
+def safe_icon(icon: str) -> str:
+    """Keep the original emoji without adding a terminal background."""
+    return icon
+
 def _visible_length(text: str) -> int:
     """Return terminal display width without ANSI or zero-width emoji marks."""
     plain_text = re.sub(r"\x1b\[[0-9;]*m", "", text)
@@ -63,6 +67,10 @@ def get_width() -> int:
     except OSError:
         return 64
 
+def get_box_width() -> int:
+    """Return a minimum width shared by all bordered components."""
+    return max(get_width(), 32)
+
 def clear_screen():
     """Clear terminal screen"""
     os.system("cls" if os.name == "nt" else "clear")
@@ -81,8 +89,8 @@ def pause():
 
 def header(title: str, emoji: str = ""):
     """Print boxed header"""
-    w = get_width()
-    label = f" {emoji}  {title} " if emoji else f" {title} "
+    w = get_box_width()
+    label = f" {safe_icon(emoji)}  {title} " if emoji else f" {title} "
     print(f"{C.CYAN}{'═' * w}{C.RESET}")
     padding = max((w - _visible_length(label)) // 2, 0)
     print(f"{C.BOLD}{C.WHITE}{' ' * padding}{label}{C.RESET}")
@@ -97,19 +105,19 @@ def sub_header(title: str, emoji: str = ""):
 
 def success(msg: str):
     """Print success message"""
-    print(f"{C.GREEN}✅ {msg}{C.RESET}")
+    print(f"{C.GREEN}{safe_icon('✅')}  {msg}{C.RESET}")
 
 def error(msg: str):
     """Print error message"""
-    print(f"{C.RED}❌ {msg}{C.RESET}")
+    print(f"{C.RED}{safe_icon('❌')}  {msg}{C.RESET}")
 
 def warn(msg: str):
     """Print warning message"""
-    print(f"{C.YELLOW}⚠️  {msg}{C.RESET}")
+    print(f"{C.YELLOW}{safe_icon('⚠️')}  {msg}{C.RESET}")
 
 def info(msg: str):
     """Print info message"""
-    print(f"{C.BLUE}ℹ️  {msg}{C.RESET}")
+    print(f"{C.BLUE}{safe_icon('ℹ️')}  {msg}{C.RESET}")
 
 def money(amount) -> str:
     """Format money with color"""
@@ -126,12 +134,12 @@ def _menu_label(label: str) -> str:
         return label
     separator = label.find(" ")
     if separator > 0:
-        return f"{label[:separator]}  {label[separator + 1:].lstrip()}"
+        return f"{safe_icon(label[:separator])}  {label[separator + 1:].lstrip()}"
     return label
 
 def menu_box(options: List[Tuple[str, str]]):
     """Print a consistently padded numbered menu in a box."""
-    w = max(get_width(), 32)
+    w = get_box_width()
     inner_width = w - 2
     print(f"{C.CYAN}┌{'─' * inner_width}┐{C.RESET}")
     for number, label in options:
@@ -164,9 +172,9 @@ def food_card(number: str, name: str, price: str, restaurant: str, details: str,
 def restaurant_card(number: int, name: str, emoji: str, cuisine: str, hours: str,
                     service_style: str, seats: str, description: str = "") -> None:
     """Render a complete, aligned restaurant summary card."""
-    width = max(get_width(), 32)
+    width = get_box_width()
     inner_width = width - 4
-    title = f"{number}. {emoji}  {name}"
+    title = f"{number}. {safe_icon(emoji)}  {name}"
     print(f"{C.CYAN}┌{'─' * (width - 2)}┐{C.RESET}")
     _card_row(title, C.CYAN, C.BOLD + C.WHITE)
     _card_row(f"{cuisine}  |  {service_style}", C.CYAN, C.GREY)
@@ -181,7 +189,7 @@ def announcement_card(number: int, message: str) -> None:
 
 def _card_row(text: str, border_color: str, text_color: str = "") -> None:
     """Render one fixed-width row shared by bordered cards."""
-    width = max(get_width(), 32)
+    width = get_box_width()
     available = width - 4
     text = str(text)
     if _visible_length(text) > available:
@@ -191,7 +199,8 @@ def _card_row(text: str, border_color: str, text_color: str = "") -> None:
 
 def panel(title: str, rows: List[str], color: str = C.CYAN):
     """Print a bordered information panel"""
-    width = get_width()
+    width = get_box_width()
+    title = _menu_label(title)
     print(f"{color}┌─ {title} {'─' * max(width - _visible_length(title) - 5, 0)}┐{C.RESET}")
     for row in rows:
         _card_row(str(row), color)

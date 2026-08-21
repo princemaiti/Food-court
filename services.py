@@ -346,9 +346,12 @@ class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
         
         reservation = Reservation(reservation_id, self.current_user.username, 
                                   restaurant_name, seats)
-        
+        reservation_data = reservation.to_dict()
+        reservation_data["reservation_id"] = reservation_id
+        reservation_data["user_id"] = self.db.data["users"][self.current_user.username].get("user_id")
+        reservation_data["restaurant_id"] = restaurant_data.get("restaurant_id")
         restaurant_data["available_seats"] -= seats
-        self.db.data.setdefault("reservations", []).append(reservation.to_dict())
+        self.db.data.setdefault("reservations", []).append(reservation_data)
         self.db.data["users"][self.current_user.username].setdefault("reservations", []).append(reservation_id)
         
         self.db.log_activity("reservation_made", self.current_user.username, 
@@ -392,10 +395,19 @@ class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
             return False, "Restaurant not found"
         if not comment.strip():
             return False, "Review comment cannot be empty"
+        has_order = any(
+            order.get("username") == self.current_user.username
+            and any(item.get("restaurant") == restaurant_name for item in order.get("items", []))
+            for order in self.db.data.get("orders", [])
+        )
+        if not has_order:
+            return False, "You can review a restaurant only after ordering from it"
         
         review = Review(self.current_user.username, restaurant_name, rating, comment)
-        self.db.data.setdefault("reviews", []).append(review.to_dict())
-        self.db.data["users"][self.current_user.username].setdefault("reviews", []).append(review.to_dict())
+        review_data = review.to_dict()
+        review_data["review_id"] = f"review_{len(self.db.data.get('reviews', [])) + 1:06d}"
+        self.db.data.setdefault("reviews", []).append(review_data)
+        self.db.data["users"][self.current_user.username].setdefault("reviews", []).append(review_data.copy())
         
         self.db.log_activity("review_added", self.current_user.username,
                             f"Review for {restaurant_name}")
@@ -485,7 +497,9 @@ class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
         if total_seats <= 0:
             return False, "Seats must be greater than zero"
 
+        restaurant_id = f"restaurant_{len(self.db.data.get('restaurants', {})) + 1:06d}"
         self.db.data.setdefault("restaurants", {})[name] = {
+            "restaurant_id": restaurant_id,
             "emoji": emoji.strip() or "🍽️",
             "total_seats": total_seats,
             "available_seats": total_seats,
@@ -519,6 +533,7 @@ class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
 
         numbers = [int(number) for number in restaurant.get("menu", {}) if str(number).isdigit()]
         item_number = str(max(numbers, default=0) + 1)
+        item["food_id"] = f"food_{len(restaurant.get('menu', {})) + 1:03d}"
         item["sold_out"] = item["stock"] <= 0
         restaurant.setdefault("menu", {})[item_number] = item
         self.db.log_activity("menu_item_added", "admin", f"{item['name']} added to {restaurant_name}")

@@ -26,14 +26,34 @@ class Database:
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("The database root must be a JSON object")
+            schema_changed = self._normalize_data(data)
             if self._enrich_catalog(data):
                 self.data = data
                 self.save()
+            elif schema_changed:
+                self.data = data
+                self.save()
             return data
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, ValueError):
             self._preserve_corrupt_data()
             warn("Data file corrupted. A copy was preserved in backups; creating fresh database.")
             return self._create_default_data()
+
+    def _normalize_data(self, data: Dict) -> bool:
+        """Repair missing top-level collections from older or partial JSON files."""
+        defaults = {
+            "users": {}, "restaurants": {}, "orders": [], "reservations": [],
+            "reviews": [], "coupons": [], "announcements": [], "activity_logs": [],
+            "next_order_id": 1001, "next_reservation_id": 501,
+        }
+        changed = False
+        for key, default in defaults.items():
+            if key not in data or not isinstance(data[key], type(default)):
+                data[key] = default.copy() if isinstance(default, (dict, list)) else default
+                changed = True
+        return changed
 
     def _preserve_corrupt_data(self) -> None:
         """Keep an unreadable data file before creating replacement data."""

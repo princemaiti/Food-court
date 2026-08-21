@@ -17,13 +17,14 @@ class AuthServiceMixin:
 
         username = username.strip().lower()
         name = name.strip()
-        if username in self.db.data["users"]:
+        users = self.db.data.setdefault("users", {})
+        if username in users:
             return False, "Username already exists"
 
         user = User(username, name, password)
         user_data = user.to_dict()
-        user_data["user_id"] = f"user_{len(self.db.data['users']) + 1:06d}"
-        self.db.data["users"][username] = user_data
+        user_data["user_id"] = f"user_{len(users) + 1:06d}"
+        users[username] = user_data
         self.db.log_activity("user_registered", username)
         self.db.save()
         return True, "Account created successfully"
@@ -31,7 +32,7 @@ class AuthServiceMixin:
     def login_user(self, username: str, password: str) -> Tuple[bool, str]:
         """Authenticate a user and migrate legacy password hashes."""
         username = username.lower()
-        user_data = self.db.data["users"].get(username)
+        user_data = self.db.data.setdefault("users", {}).get(username)
         if not user_data:
             return False, "User not found"
 

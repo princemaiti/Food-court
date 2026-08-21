@@ -184,6 +184,17 @@ class AuthenticationTests(unittest.TestCase):
         self.assertTrue(success)
         self.assertTrue(database.data["users"]["legacy"]["password"].startswith("pbkdf2_sha256$"))
 
+    def test_partial_database_schema_is_repaired(self):
+        database = Database.__new__(Database)
+        data = {"announcements": ["Welcome"]}
+
+        changed = database._normalize_data(data)
+
+        self.assertTrue(changed)
+        self.assertEqual(data["users"], {})
+        self.assertEqual(data["orders"], [])
+        self.assertEqual(data["next_order_id"], 1001)
+
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):

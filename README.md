@@ -144,15 +144,3 @@ available command-line options.
 
 MIT
 
-# 🚀 QUICK START
-Prerequisites
-Python 3.8 or higher
-No external dependencies required! (Uses only standard library)
-Installation
-
-Clone the repository
-
-`git clone https://github.com/princemaiti/food-court.git`
-
-cd food-court
-

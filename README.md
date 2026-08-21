@@ -1,102 +1,138 @@
-# 🍽️ ALAKH DA DHAABA
+# Alakh Da Dhaaba 🍽️
 
-A terminal-based food-court management system built with Python's standard library.
-It is designed as a learning project: it demonstrates authentication, carts, wallets,
-orders, reservations, reviews, administration, backups, and JSON persistence.
+Alakh Da Dhaaba is a terminal-based food-court management system made with Python.
 
-## Requirements
-Money is represented as whole Indian rupees using integer arithmetic. This avoids floating-
-point rounding in the current product model; paise and payment-provider integration are
-outside the scope of this project.
+You can browse restaurants, order food, reserve seats, use coupons, manage your wallet,
+save favourites, write reviews, and view your order history. An admin can manage users,
+restaurants, menus, orders, announcements, backups, and statistics.
 
-## Architecture
+This is a learning project built with Python's standard library, so no extra packages are
+needed.
 
-The active application follows a small layered CLI architecture:
+## What You Can Do
 
-```text
-main.py       application startup and login/register screens
-user_portal.py user navigation loop
-admin_portal.py admin navigation loop
-services.py   business workflows and validation
-auth_service.py authentication and session workflows
-order_service.py order placement, status, refunds, and receipts
-models.py     domain objects and invariants
-database.py   JSON persistence, backups, and activity logs
-ui.py         terminal rendering helpers
-config.py     paths and application constants
-tests/        standard-library regression tests
-stress_test.py isolated synthetic-data generator for scale experiments
+### As a customer
+
+- Create an account and log in
+- Browse 8 restaurants and 160 food items
+- Add food to your cart and place orders
+- Pay using your wallet
+- Use one-time coupons
+- Reserve restaurant seats
+- Cancel eligible orders and receive refunds
+- Save favourite food items
+- Review restaurants after ordering
+- View notifications, receipts, points, and order history
+
+### As an admin
+
+- View dashboard statistics
+- Manage customer accounts
+- Make audited wallet adjustments
+- Manage restaurants and menu items
+- Update active order quantities and statuses
+- View and remove reviews
+- Publish announcements
+- Create data backups
+- View activity logs
+
+## How to Run
+
+You need Python 3.8 or newer.
+
+Run the application:
+
+```bash
+py main.py
 ```
 
-The CLI calls services for state changes. Services update models and persistence; UI
-helpers only render output. The project intentionally keeps JSON and the terminal UI
-because they are appropriate for this educational scope. The portal mixins and
-authentication service are feature boundaries that can be extended with order,
-reservation, restaurant, and admin service modules as those workflows grow.
+Run the tests:
 
-## Known Scope Limits
+```bash
+py -m unittest discover -s tests -v
+```
 
-- JSON persistence has no database transactions or multi-process concurrency control.
-- Backups should be created before manual data editing or experimental changes.
-- Admin credentials should be moved to an environment variable or secret store before
-	deploying beyond a local classroom/demo environment.
+## Test Accounts
 
-## Scale Testing
+These accounts are already available:
 
-Generate an isolated large dataset without changing the live application data:
+| Username | Password |
+| --- | --- |
+| `prince` | `2007` |
+| `winkle` | `2711` |
+| `riya_sharma` | `demo1234` |
+| `arjun_mehta` | `demo1234` |
+| `neha_kapoor` | `demo1234` |
+| `kabir_singh` | `demo1234` |
+
+Admin login:
+
+```text
+Username: admin
+Password: admin123
+```
+
+For local use, custom admin credentials can be set in PowerShell:
+
+```powershell
+$env:FOODCOURT_ADMIN_USERNAME = "your_admin"
+$env:FOODCOURT_ADMIN_PASSWORD = "your_password"
+py main.py
+```
+
+## Coupon Codes
+
+- `SAVE10` - 10% off
+- `FLAT50` - ₹50 off
+- `WELCOME20` - 20% off your first order
+- `FEAST100` - ₹100 off orders above ₹700
+- `WEEKEND15` - 15% off
+
+Each coupon can be used once per customer.
+
+## Project Files
+
+- `main.py` - Starts the application and contains screens
+- `user_portal.py` - Customer navigation
+- `admin_portal.py` - Admin navigation
+- `services.py` - Main business logic
+- `auth_service.py` - Login and registration logic
+- `order_service.py` - Orders, refunds, and receipts
+- `models.py` - User, food, cart, order, and reservation models
+- `database.py` - JSON storage, backups, and data migration
+- `ui.py` - Terminal colors, menus, cards, and layout
+- `tests/` - Automated tests
+
+## Data Storage
+
+The application stores its data in `data/food_court.json`.
+
+Backups are stored in `backups/`, and order receipts are stored in `receipts/`.
+The project uses JSON because it is simple to understand and useful for learning.
+
+## Large Data Testing
+
+The project includes a separate stress-data generator. It creates synthetic data without
+changing the live application database:
 
 ```bash
 py stress_test.py
 ```
 
-Use `--users`, `--restaurants`, `--foods`, `--orders`, and `--reviews` to customize
-the volume. Set `FOODCOURT_ADMIN_USERNAME` and `FOODCOURT_ADMIN_PASSWORD` in the
-environment to replace the local development admin credentials.
+You can customize the number of users, restaurants, foods, orders, and reviews using the
+available command-line options.
 
-**License:** MIT
+## License
 
----
+MIT
 
-## ✨ FEATURES
+🚀 QUICK START
+Prerequisites
+Python 3.8 or higher
+No external dependencies required! (Uses only standard library)
+Installation
 
-### 👤 User Features
-- **User Authentication** - Registration and login with salted PBKDF2-HMAC-SHA256 hashing
-- **Browse Restaurants** - 4 restaurants with 40+ food items
-- **Smart Cart System** - Add/remove items, change quantities, real-time total
-- **Wallet System** - Add money, track balance, earn food points
-- **Seat Reservation** - Book seats at restaurants with visual occupancy bars
-- **Order Management** - Place orders, track status, cancel with refund
-- **Favorites** - Save favorite food items for quick access
-- **Reviews & Ratings** - Rate restaurants and write reviews
-- **Coupon System** - Apply discount codes during checkout
-- **Receipt Generation** - Automatic text receipts for every order
+Clone the repository
+```git clone https://github.com/princemaiti/food-court.git
+cd food-court```
 
-### 👑 Admin Features
-- **Dashboard** - View users, orders, revenue statistics
-- **Manage Restaurants** - Reset seats, view occupancy
-- **Order Management** - Update order statuses (Preparing → Confirmed → Ready → Delivered)
-- **Announcements** - Send notifications to all users
-- **Activity Logs** - Track all system activities
-- **Data Backup** - Create timestamped backups
-
-### 🎨 UI Features
-- **ANSI Colors** - Beautiful colored terminal interface
-- **Box Drawing** - Professional menus with borders
-- **Seat Visualization** - Visual bars showing seat occupancy
-- **Status Badges** - Color-coded order statuses
-- **Cross-Platform** - Works on Windows, Linux, and macOS
-
----
-
-## 🚀 QUICK START
-
-### Prerequisites
-- Python 3.8 or higher
-- No external dependencies required! (Uses only standard library)
-
-### Installation
-
-1. **Clone the repository**
-```bash
-git clone https://github.com/princemaiti/food-court.git
-cd food-court

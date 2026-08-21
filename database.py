@@ -377,6 +377,18 @@ class Database:
                     if item.get(key) != value:
                         item[key] = value
                         changed = True
+        if not data.get("demo_data_seeded"):
+            self._seed_demo_history(data)
+            data["demo_data_seeded"] = True
+            changed = True
+        if not data.get("customer_history_enhanced"):
+            self._enhance_customer_history(data)
+            data["customer_history_enhanced"] = True
+            changed = True
+        for coupon in data.setdefault("coupons", []):
+            if "used_by" not in coupon:
+                coupon["used_by"] = []
+                changed = True
         coupon_codes = {coupon.get("code", "").upper() for coupon in data.setdefault("coupons", [])}
         for coupon in [
             {"code": "WELCOME20", "type": "percent", "value": 20, "description": "20% off your first order"},
@@ -396,7 +408,173 @@ class Database:
             if announcement not in announcements:
                 announcements.append(announcement)
                 changed = True
+        for order in data.get("orders", []):
+            if order.pop("demo_data", None) is not None:
+                changed = True
         return changed
+
+    def _seed_demo_history(self, data: Dict) -> None:
+        """Add realistic demo activity once without touching existing customer history."""
+        from models import User
+
+        demo_customers = [
+            ("demo_riya", "Riya Sharma", "demo1234", 4200),
+            ("demo_arjun", "Arjun Mehta", "demo1234", 6800),
+            ("demo_neha", "Neha Kapoor", "demo1234", 3150),
+            ("demo_kabir", "Kabir Singh", "demo1234", 9200),
+        ]
+        for username, name, password, spent in demo_customers:
+            if username in data["users"]:
+                continue
+            user = User(username, name, password, 12000)
+            data["users"][username] = user.to_dict()
+            order_count = 2
+            data["users"][username]["orders"] = []
+            paid_total = 0
+            for order_number in range(order_count):
+                restaurant_names = list(data["restaurants"])
+                restaurant_name = restaurant_names[(len(data["orders"]) + order_number) % len(restaurant_names)]
+                restaurant = data["restaurants"][restaurant_name]
+                menu_items = list(restaurant.get("menu", {}).items())
+                item_number, menu_item = menu_items[(len(data["orders"]) + order_number) % len(menu_items)]
+                quantity = 3 + (spent // 1000) + order_number
+                subtotal = menu_item["price"] * quantity
+                coupon_code = "SAVE10" if order_number == 0 else ""
+                total = subtotal - (subtotal * 10 // 100) if coupon_code else subtotal
+                order_id = f"ALD{data['next_order_id']}"
+                data["next_order_id"] += 1
+                order = {
+                    "id": order_id,
+                    "username": username,
+                    "items": [{
+                        "name": menu_item["name"],
+                        "price": menu_item["price"],
+                        "quantity": quantity,
+                        "restaurant": restaurant_name,
+                        "item_number": item_number,
+                    }],
+                    "subtotal": subtotal,
+                    "discount": subtotal - total,
+                    "total": total,
+                    "coupon_code": coupon_code,
+                    "payment_method": "Wallet",
+                    "status": "Delivered" if order_number == 0 else "Confirmed",
+                    "date": f"{17 + order_number:02d}-08-2026 0{2 + order_number}:15 PM",
+                    "demo_data": True,
+                }
+                data["orders"].append(order)
+                data["users"][username]["orders"].append(order_id)
+                paid_total += total
+                if coupon_code:
+                    for coupon in data.get("coupons", []):
+                        if coupon.get("code", "").upper() == coupon_code:
+                            coupon.setdefault("used_by", []).append(username)
+                            break
+                data.setdefault("activity_logs", []).append({
+                    "time": order["date"],
+                    "action": "demo_order_seeded",
+                    "username": username,
+                    "details": f"Paid {order_id} for ₹{total} using wallet",
+                })
+            data["users"][username]["wallet"] = 12000 - paid_total
+            data["users"][username]["food_points"] = paid_total // 10
+
+    def _enhance_customer_history(self, data: Dict) -> None:
+        """Convert seeded accounts into normal customers with complete app activity."""
+        rename_map = {
+            "demo_riya": "riya_sharma",
+            "demo_arjun": "arjun_mehta",
+            "demo_neha": "neha_kapoor",
+            "demo_kabir": "kabir_singh",
+        }
+        for old_username, new_username in rename_map.items():
+            if old_username in data.get("users", {}) and new_username not in data["users"]:
+                data["users"][new_username] = data["users"].pop(old_username)
+        for old_username, new_username in rename_map.items():
+            for order in data.get("orders", []):
+                if order.get("username") == old_username:
+                    order["username"] = new_username
+            for reservation in data.get("reservations", []):
+                if reservation.get("username") == old_username:
+                    reservation["username"] = new_username
+            for review in data.get("reviews", []):
+                if review.get("username") == old_username:
+                    review["username"] = new_username
+            for log in data.get("activity_logs", []):
+                if log.get("username") == old_username:
+                    log["username"] = new_username
+            for coupon in data.get("coupons", []):
+                coupon["used_by"] = [new_username if user == old_username else user for user in coupon.get("used_by", [])]
+
+        customers = ["riya_sharma", "arjun_mehta", "neha_kapoor", "kabir_singh"]
+        restaurants = list(data.get("restaurants", {}).items())
+        for index, username in enumerate(customers):
+            user = data.get("users", {}).get(username)
+            if not user or not restaurants:
+                continue
+            first_restaurant, first_data = restaurants[index % len(restaurants)]
+            menu = list(first_data.get("menu", {}).items())
+            if not menu:
+                continue
+            first_number, first_item = menu[index % len(menu)]
+            favorite = {
+                "name": first_item["name"], "price": first_item["price"],
+                "restaurant": first_restaurant, "item_number": first_number,
+            }
+            if not any(saved.get("item_number") == first_number and saved.get("restaurant") == first_restaurant for saved in user.get("favorites", [])):
+                user.setdefault("favorites", []).append(favorite)
+
+            second_restaurant, second_data = restaurants[(index + 2) % len(restaurants)]
+            second_menu = list(second_data.get("menu", {}).items())
+            second_number, second_item = second_menu[(index + 1) % len(second_menu)]
+            second_favorite = {
+                "name": second_item["name"], "price": second_item["price"],
+                "restaurant": second_restaurant, "item_number": second_number,
+            }
+            if not any(saved.get("item_number") == second_number and saved.get("restaurant") == second_restaurant for saved in user.get("favorites", [])):
+                user.setdefault("favorites", []).append(second_favorite)
+
+            reservation_restaurant, reservation_data = restaurants[(index + 1) % len(restaurants)]
+            if not any(item.get("username") == username for item in data.get("reservations", [])):
+                seats = 2
+                if reservation_data.get("available_seats", 0) >= seats:
+                    reservation_data["available_seats"] -= seats
+                    reservation_id = f"RES{data['next_reservation_id']}"
+                    data["next_reservation_id"] += 1
+                    reservation = {
+                        "id": reservation_id, "username": username,
+                        "restaurant": reservation_restaurant, "seats": seats,
+                        "date": f"{22 + index:02d}-08-2026 07:30 PM", "status": "Confirmed",
+                    }
+                    data.setdefault("reservations", []).append(reservation)
+                    user.setdefault("reservations", []).append(reservation_id)
+
+            review = {
+                "username": username, "restaurant": first_restaurant,
+                "rating": 4 + (index % 2),
+                "comment": [
+                    "Excellent flavours and quick service.",
+                    "Generous portions and a lovely dining experience.",
+                    "Fresh food, friendly staff and a clean branch.",
+                    "The menu has plenty of great vegetarian choices.",
+                ][index],
+                "date": f"{21 + index:02d}-08-2026 08:15 PM",
+            }
+            if not any(item.get("username") == username for item in data.get("reviews", [])):
+                data.setdefault("reviews", []).append(review)
+                user.setdefault("reviews", []).append(review.copy())
+
+            for action, details in [
+                ("user_login", "Customer signed in"),
+                ("menu_browsed", f"Browsed {first_restaurant}"),
+                ("favorite_added", f"Saved {first_item['name']}"),
+                ("reservation_made", f"Reserved seats at {reservation_restaurant}"),
+                ("review_added", f"Reviewed {first_restaurant}"),
+            ]:
+                data.setdefault("activity_logs", []).append({
+                    "time": "21-08-2026 08:00 PM", "action": action,
+                    "username": username, "details": details,
+                })
     
     def backup(self) -> str:
         """Create data backup"""

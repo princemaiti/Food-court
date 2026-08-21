@@ -383,5 +383,6 @@ class Coupon:
             "code": self.code,
             "type": self.type,
             "value": self.value,
-            "description": self.description
+            "description": self.description,
+            "used_by": []
         }

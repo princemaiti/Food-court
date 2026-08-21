@@ -3,6 +3,7 @@ Business logic for Alakh Da Dhaaba
 """
 
 import os
+from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 from models import User, Restaurant, FoodItem, Cart, Order, Reservation, Review, Coupon
 from database import Database
@@ -419,6 +420,34 @@ class FoodCourtService(AuthServiceMixin, OrderServiceMixin):
         self.db.log_activity("user_updated", "admin", f"User {username} updated")
         self.db.save()
         return True, f"User {username} updated"
+
+    def adjust_user_wallet(self, username: str, amount: int, reason: str) -> Tuple[bool, str]:
+        """Apply an auditable wallet adjustment instead of overwriting a balance."""
+        user_data = self.db.data.get("users", {}).get(username)
+        reason = reason.strip()
+        if not user_data:
+            return False, "User not found"
+        if amount == 0:
+            return False, "Adjustment cannot be zero"
+        if not reason:
+            return False, "A reason is required for wallet adjustments"
+
+        old_balance = user_data.get("wallet", 0)
+        new_balance = old_balance + amount
+        if new_balance < 0:
+            return False, "Adjustment cannot make the wallet negative"
+
+        user_data["wallet"] = new_balance
+        user_data.setdefault("wallet_transactions", []).append({
+            "amount": amount,
+            "balance": new_balance,
+            "reason": reason,
+            "by": "admin",
+            "time": datetime.now().strftime("%d-%m-%Y %I:%M %p"),
+        })
+        self.db.log_activity("wallet_adjusted", "admin", f"{username}: {amount:+} for {reason}")
+        self.db.save()
+        return True, f"Wallet adjusted by ₹{amount:+}. New balance: ₹{new_balance}"
 
     def delete_user(self, username: str) -> Tuple[bool, str]:
         """Delete a user while retaining historical order data"""

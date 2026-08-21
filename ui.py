@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import unicodedata
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 class Colors:
     """ANSI color codes"""
@@ -141,17 +141,60 @@ def menu_box(options: List[Tuple[str, str]]):
         print(f"{C.CYAN}│{C.RESET}{text}{' ' * max(pad, 0)}{C.CYAN}│{C.RESET}")
     print(f"{C.CYAN}└{'─' * inner_width}┘{C.RESET}")
 
+def pagination(items: List[Any], page: int, page_size: int = 10) -> Tuple[List[Any], int]:
+    """Return one stable page of items and the total page count."""
+    page_size = max(page_size, 1)
+    total_pages = max((len(items) + page_size - 1) // page_size, 1)
+    page = max(0, min(page, total_pages - 1))
+    start = page * page_size
+    return items[start:start + page_size], total_pages
+
+def pagination_footer(page: int, total_pages: int, item_count: int) -> None:
+    """Render compact navigation help for long lists."""
+    print(
+        f"\n{C.DIM}Showing page {page + 1}/{total_pages}  •  {item_count} items  •  "
+        f"n next  p previous  0 back{C.RESET}"
+    )
+
+def food_card(number: str, name: str, price: str, restaurant: str, details: str, color: str = C.YELLOW) -> None:
+    """Render a compact, aligned food item row."""
+    print(f"{color}{number:>3}.{C.RESET} {C.BOLD}{name}{C.RESET}  {price}")
+    print(f"     {C.GREY}{restaurant}  |  {details}{C.RESET}")
+
+def restaurant_card(number: int, name: str, emoji: str, cuisine: str, hours: str,
+                    service_style: str, seats: str, description: str = "") -> None:
+    """Render a complete, aligned restaurant summary card."""
+    width = max(get_width(), 32)
+    inner_width = width - 4
+    title = f"{number}. {emoji}  {name}"
+    print(f"{C.CYAN}┌{'─' * (width - 2)}┐{C.RESET}")
+    _card_row(title, C.CYAN, C.BOLD + C.WHITE)
+    _card_row(f"{cuisine}  |  {service_style}", C.CYAN, C.GREY)
+    _card_row(f"Open {hours}  |  Seats {seats}", C.CYAN, C.GREY)
+    if description:
+        _card_row(description[:inner_width - 1], C.CYAN, C.WHITE)
+    print(f"{C.CYAN}└{'─' * (width - 2)}┘{C.RESET}")
+
+def announcement_card(number: int, message: str) -> None:
+    """Render an announcement as a readable notification card."""
+    panel(f"📢  UPDATE {number:02d}", [message], C.YELLOW)
+
+def _card_row(text: str, border_color: str, text_color: str = "") -> None:
+    """Render one fixed-width row shared by bordered cards."""
+    width = max(get_width(), 32)
+    available = width - 4
+    text = str(text)
+    if _visible_length(text) > available:
+        text = text[:available - 1] + "…"
+    padding = max(available - _visible_length(text), 0)
+    print(f"{border_color}│{C.RESET} {text_color}{text}{C.RESET}{' ' * padding} {border_color}│{C.RESET}")
+
 def panel(title: str, rows: List[str], color: str = C.CYAN):
     """Print a bordered information panel"""
     width = get_width()
-    inner_width = width - 4
-    print(f"{color}┌─ {title} {'─' * max(width - len(title) - 5, 0)}┐{C.RESET}")
+    print(f"{color}┌─ {title} {'─' * max(width - _visible_length(title) - 5, 0)}┐{C.RESET}")
     for row in rows:
-        text = str(row)
-        if _visible_length(text) > inner_width:
-            text = text[:inner_width - 1] + "…"
-        padding = max(inner_width - _visible_length(text), 0)
-        print(f"{color}│{C.RESET} {text}{' ' * padding} {color}│{C.RESET}")
+        _card_row(str(row), color)
     print(f"{color}└{'─' * (width - 2)}┘{C.RESET}")
 
 def metric_cards(metrics: List[Tuple[str, str, str]]):

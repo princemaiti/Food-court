@@ -26,6 +26,9 @@ class OrderServiceMixin:
             )
             if coupon_data is None:
                 return False, "Coupon code not found", None
+            used_by = coupon_data.setdefault("used_by", [])
+            if self.current_user.username in used_by:
+                return False, "You have already used this coupon", None
             coupon = Coupon(
                 coupon_data["code"], coupon_data["type"],
                 coupon_data["value"], coupon_data.get("description", ""),
@@ -44,10 +47,16 @@ class OrderServiceMixin:
         order_id = f"ALD{self.db.data['next_order_id']}"
         self.db.data["next_order_id"] += 1
         order = Order(order_id, self.current_user.username, self.cart.to_list(), total)
+        if coupon_code:
+            coupon_data["used_by"].append(self.current_user.username)
+            order_data = order.to_dict()
+            order_data["coupon_code"] = coupon_data["code"].upper()
+        else:
+            order_data = order.to_dict()
         user_data["wallet"] -= total
         user_data["food_points"] = user_data.get("food_points", 0) + total // POINTS_PER_RUPEE
         self._update_stock_after_order()
-        self.db.data["orders"].append(order.to_dict())
+        self.db.data["orders"].append(order_data)
         user_data.setdefault("orders", []).append(order_id)
         self.db.log_activity("order_placed", self.current_user.username, f"Order {order_id} for ₹{total}")
         self.db.save()

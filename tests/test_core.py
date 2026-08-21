@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from models import Cart, Coupon, FoodItem, Restaurant, User
 from services import FoodCourtService
-from ui import C, _menu_label, _visible_length, menu_box
+from ui import C, _menu_label, _visible_length, announcement_card, menu_box, panel, restaurant_card
 
 
 class FakeDatabase:
@@ -93,6 +93,23 @@ class UITests(unittest.TestCase):
         self.assertEqual(restaurant.opening_hours, "9:00 AM - 9:00 PM")
         self.assertEqual(restaurant.service_style, "Counter service")
 
+    def test_restaurant_and_announcement_cards_keep_their_width(self):
+        output = StringIO()
+        with patch("ui.get_width", return_value=40), patch("sys.stdout", output):
+            restaurant_card(1, "Cafe", "🍵", "Cafe", "9:00 AM - 9:00 PM", "Takeaway", "8/12", "Fresh drinks")
+            announcement_card(1, "Welcome to the food court")
+
+        bordered_lines = [line for line in output.getvalue().splitlines() if "│" in line or "┌" in line or "└" in line]
+        self.assertTrue(all(_visible_length(line) == 40 for line in bordered_lines))
+
+    def test_panel_rows_keep_their_width_with_emoji_and_long_text(self):
+        output = StringIO()
+        with patch("ui.get_width", return_value=40), patch("sys.stdout", output):
+            panel("📢  NOTIFICATIONS", ["A very long notification that must fit"])
+
+        bordered_lines = output.getvalue().splitlines()
+        self.assertTrue(all(_visible_length(line) == 40 for line in bordered_lines))
+
 
 class CouponTests(unittest.TestCase):
     def test_discount_cannot_exceed_total(self):
@@ -166,6 +183,8 @@ class ServiceTests(unittest.TestCase):
             "restaurants": {},
             "reviews": [],
             "announcements": [],
+            "coupons": [],
+            "next_order_id": 1001,
         })
         self.service = FoodCourtService.__new__(FoodCourtService)
         self.service.db = self.database
@@ -197,6 +216,23 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertIn("not found", message)
         self.assertIsNone(order)
+
+    def test_coupon_can_only_be_used_once_by_each_user(self):
+        self.database.data["restaurants"] = {
+            "Cafe": {"menu": {"1": {"name": "Soup", "price": 80, "stock": 5}}},
+        }
+        self.database.data["coupons"] = [{
+            "code": "ONCE", "type": "flat", "value": 10, "description": "One use",
+        }]
+        self.service.cart.add_item(FoodItem("Soup", 80, stock=5), "Cafe", 1, "1")
+
+        first_success, _, _ = self.service.place_order("ONCE")
+        self.service.cart.add_item(FoodItem("Soup", 80, stock=4), "Cafe", 1, "1")
+        second_success, second_message, _ = self.service.place_order("ONCE")
+
+        self.assertTrue(first_success)
+        self.assertFalse(second_success)
+        self.assertIn("already used", second_message)
 
     def test_order_status_must_follow_flow(self):
         success, _ = self.service.update_order_status("ALD1", "Delivered")
@@ -247,6 +283,15 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.database.data["users"]["tester"]["name"], "Updated User")
         self.assertEqual(self.database.data["users"]["tester"]["wallet"], 250)
         self.assertEqual(self.database.data["users"]["tester"]["food_points"], 40)
+
+    def test_wallet_adjustment_requires_reason_and_records_transaction(self):
+        success, _ = self.service.adjust_user_wallet("tester", 50, "Support credit")
+
+        self.assertTrue(success)
+        self.assertEqual(self.database.data["users"]["tester"]["wallet"], 150)
+        self.assertEqual(self.database.data["users"]["tester"]["wallet_transactions"][0]["reason"], "Support credit")
+        self.assertFalse(self.service.adjust_user_wallet("tester", -500, "Refund")[0])
+        self.assertFalse(self.service.adjust_user_wallet("tester", 10, "")[0])
 
     def test_cancel_order_refunds_only_once(self):
         self.database.data["restaurants"] = {

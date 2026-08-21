@@ -86,37 +86,37 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
     
     def browse_food(self):
         """Browse food"""
-        clear_screen()
-        header("BROWSE FOOD", "🍔")
-        print()
-        
         all_food = []
         for restaurant_name, restaurant_data in self.service.db.data["restaurants"].items():
             for item_num, item in restaurant_data["menu"].items():
                 all_food.append((restaurant_name, item_num, item))
-        
-        for index, (restaurant_name, item_num, item) in enumerate(all_food, 1):
-            status = "SOLD OUT" if item["stock"] <= 0 else f"{item['stock']} left"
-            print(f"{C.YELLOW}{index}.{C.RESET} {item['name']} - {money(item['price'])}")
-            print(f"   {C.GREY}{restaurant_name} | {status} | ⭐ {item['rating']}{C.RESET}")
-        
-        choice = input(f"\n{C.CYAN}Enter food number to add to cart (0 to back): {C.RESET}").strip()
-        
-        if choice == "0":
-            return
-        
-        try:
-            index = int(choice) - 1
-            restaurant_name, item_num, item = all_food[index]
-            success_flag, message = self.service.add_to_cart(restaurant_name, item_num)
-            if success_flag:
-                success(message)
-            else:
-                error(message)
-        except (ValueError, IndexError):
-            error("Invalid choice.")
-        
-        pause()
+        page = 0
+        while True:
+            clear_screen()
+            header("ALL FOOD", "🍔")
+            visible, total_pages = pagination(all_food, page)
+            start_number = page * 10
+            for offset, (restaurant_name, item_num, item) in enumerate(visible):
+                status = "SOLD OUT" if item["stock"] <= 0 else f"{item['stock']} left"
+                food_card(str(start_number + offset + 1), item["name"], money(item["price"]), restaurant_name, f"{status}  |  ⭐ {item['rating']}")
+            pagination_footer(page, total_pages, len(all_food))
+            choice = input(f"{C.CYAN}Food number, n/p, or 0: {C.RESET}").strip().lower()
+            if choice == "0":
+                return
+            if choice == "n" and page < total_pages - 1:
+                page += 1
+                continue
+            if choice == "p" and page > 0:
+                page -= 1
+                continue
+            try:
+                index = int(choice) - 1
+                restaurant_name, item_num, _ = all_food[index]
+                success_flag, message = self.service.add_to_cart(restaurant_name, item_num)
+                success(message) if success_flag else error(message)
+            except (ValueError, IndexError):
+                error("Choose a visible food number or n/p.")
+            pause()
     
     def restaurants_screen(self):
         """Restaurants screen"""
@@ -127,11 +127,12 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
             
             restaurants = self.service.get_restaurants()
             for index, (name, restaurant) in enumerate(restaurants, 1):
-                print(f"{C.YELLOW}{index}.{C.RESET} {restaurant.emoji} {C.BOLD}{name}{C.RESET}")
-                print(f"     {C.GREY}{restaurant.cuisine} | {restaurant.opening_hours} | {restaurant.service_style}{C.RESET}")
-                if restaurant.description:
-                    print(f"     {C.WHITE}{restaurant.description}{C.RESET}")
-                print(f"     {seat_bar(restaurant.available_seats, restaurant.total_seats)}")
+                restaurant_card(
+                    index, name, restaurant.emoji, restaurant.cuisine,
+                    restaurant.opening_hours, restaurant.service_style,
+                    f"{restaurant.available_seats}/{restaurant.total_seats}",
+                    restaurant.description,
+                )
             
             print(f"\n{C.GREY}0. Back{C.RESET}")
             choice = input(f"\n{C.CYAN}Enter restaurant number: {C.RESET}").strip()
@@ -149,21 +150,29 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
     
     def show_restaurant_menu(self, restaurant_name, restaurant):
         """Show restaurant menu"""
+        page = 0
         while True:
             clear_screen()
             header(restaurant_name.upper(), restaurant.emoji)
             print()
             
-            for num, item in restaurant.menu.items():
+            menu_items = list(restaurant.menu.items())
+            visible, total_pages = pagination(menu_items, page)
+            for num, item in visible:
                 status = "SOLD OUT" if item.stock <= 0 else f"{item.stock} left"
-                print(f"{C.YELLOW}{num}.{C.RESET} {item.name} - {money(item.price)}")
-                print(f"   {C.GREY}{item.description} | {item.category} | {status} | ⭐ {item.rating}{C.RESET}")
+                food_card(num, item.name, money(item.price), item.category, f"{status}  |  ⭐ {item.rating}")
             
-            print(f"\n{C.GREY}0. Back{C.RESET}")
-            choice = input(f"\n{C.CYAN}Enter dish number to add: {C.RESET}").strip()
+            pagination_footer(page, total_pages, len(menu_items))
+            choice = input(f"{C.CYAN}Dish number, n/p, or 0: {C.RESET}").strip().lower()
             
             if choice == "0":
                 return
+            if choice == "n" and page < total_pages - 1:
+                page += 1
+                continue
+            if choice == "p" and page > 0:
+                page -= 1
+                continue
             
             success_flag, message = self.service.add_to_cart(restaurant_name, choice)
             if success_flag:
@@ -342,6 +351,7 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
     
     def favorites_screen(self):
         """Favorites screen"""
+        page = 0
         while True:
             clear_screen()
             header("FAVORITES", "❤️")
@@ -354,11 +364,13 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
             if not user.favorites:
                 print(f"{C.GREY}No favorites yet.{C.RESET}")
             else:
-                for index, favorite in enumerate(user.favorites, 1):
-                    print(
-                        f"{C.YELLOW}{index}.{C.RESET} {favorite['name']} - {money(favorite['price'])}"
-                        f" {C.GREY}| {favorite.get('restaurant', 'Unknown restaurant')}{C.RESET}"
+                visible, total_pages = pagination(user.favorites, page)
+                for offset, favorite in enumerate(visible):
+                    food_card(
+                        str(page * 10 + offset + 1), favorite["name"], money(favorite["price"]),
+                        favorite.get("restaurant", "Unknown restaurant"), "Saved favourite",
                     )
+                pagination_footer(page, total_pages, len(user.favorites))
 
             menu_box([
                 ("1", "❤️ Add Favorite"),
@@ -373,6 +385,10 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
                 self.remove_favorite_screen()
             elif choice == "3":
                 return
+            elif choice.lower() == "n" and user.favorites:
+                page = min(page + 1, max((len(user.favorites) - 1) // 10, 0))
+            elif choice.lower() == "p" and user.favorites:
+                page = max(page - 1, 0)
             else:
                 error("Invalid choice.")
                 pause()
@@ -388,19 +404,30 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
             for item_number, item in restaurant.menu.items():
                 all_food.append((restaurant_name, item_number, item))
 
-        for index, (restaurant_name, _, item) in enumerate(all_food, 1):
-            print(f"{C.YELLOW}{index}.{C.RESET} {item.name} - {money(item.price)} {C.GREY}| {restaurant_name}{C.RESET}")
-
-        try:
-            choice = int(input(f"\n{C.CYAN}Choose food number (0 to cancel): {C.RESET}"))
-            if choice == 0:
+        page = 0
+        while True:
+            clear_screen()
+            header("ADD FAVORITE", "❤️")
+            visible, total_pages = pagination(all_food, page)
+            for offset, (restaurant_name, _, item) in enumerate(visible):
+                food_card(str(page * 10 + offset + 1), item.name, money(item.price), restaurant_name, f"⭐ {item.rating}")
+            pagination_footer(page, total_pages, len(all_food))
+            choice = input(f"{C.CYAN}Food number, n/p, or 0 cancel: {C.RESET}").strip().lower()
+            if choice == "0":
                 return
-            restaurant_name, item_number, _ = all_food[choice - 1]
-            success_flag, message = self.service.add_favorite(restaurant_name, item_number)
-            success(message) if success_flag else error(message)
-        except (ValueError, IndexError):
-            error("Invalid choice.")
-        pause()
+            if choice == "n" and page < total_pages - 1:
+                page += 1
+                continue
+            if choice == "p" and page > 0:
+                page -= 1
+                continue
+            try:
+                restaurant_name, item_number, _ = all_food[int(choice) - 1]
+                success_flag, message = self.service.add_favorite(restaurant_name, item_number)
+                success(message) if success_flag else error(message)
+            except (ValueError, IndexError):
+                error("Choose a visible food number or n/p.")
+            pause()
 
     def remove_favorite_screen(self):
         """Remove one saved favorite"""
@@ -505,8 +532,13 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
         header("ANNOUNCEMENTS", "🔔")
         print()
         
-        for announcement in self.service.db.data.get("announcements", []):
-            print(f"{C.YELLOW}📢{C.RESET} {announcement}")
+        announcements = self.service.db.data.get("announcements", [])
+        if not announcements:
+            panel("📭  INBOX CLEAR", ["No new announcements right now."], C.GREY)
+        else:
+            for index, announcement in enumerate(announcements, 1):
+                message = announcement if isinstance(announcement, str) else announcement.get("message", "")
+                announcement_card(index, message)
         
         pause()
     
@@ -514,20 +546,25 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
         """Profile screen"""
         clear_screen()
         header("PROFILE", "👤")
-        print()
-        
         user = self.service.current_user
         if not user:
             return
-        
-        print(f"Name: {C.BOLD}{user.name}{C.RESET}")
-        print(f"Username: {user.username}")
-        print(f"Wallet: {money(user.wallet)}")
-        print(f"Food Points: {C.YELLOW}{user.food_points}{C.RESET}")
-        print(f"Favorites: {len(user.favorites)}")
-        print(f"Orders: {len(user.orders)}")
-        print(f"Reviews: {len(user.reviews)}")
-        
+
+        panel("👤  ACCOUNT", [
+            f"Name       {C.BOLD}{user.name}{C.RESET}",
+            f"Username   {C.CYAN}@{user.username}{C.RESET}",
+            f"Joined     {C.GREY}{user.created_at or 'Recently'}{C.RESET}",
+        ], C.CYAN)
+        panel("💳  BALANCE", [
+            f"Wallet     {money(user.wallet)}",
+            f"Points     {C.YELLOW}{user.food_points} ⭐{C.RESET}",
+        ], C.GREEN)
+        panel("📈  ACTIVITY", [
+            f"Orders     {C.WHITE}{len(user.orders)}{C.RESET}",
+            f"Reserved   {C.WHITE}{len(user.reservations)} seats bookings{C.RESET}",
+            f"Favorites  {C.WHITE}{len(user.favorites)} saved items{C.RESET}",
+            f"Reviews    {C.WHITE}{len(user.reviews)} submitted{C.RESET}",
+        ], C.MAGENTA)
         pause()
     
     def admin_screen(self):
@@ -573,22 +610,32 @@ class FoodCourtApp(UserPortalMixin, AdminPortalMixin):
                 pause()
                 continue
 
-            menu_box([("1", "✏️ Edit User"), ("2", "🗑️ Delete User"), ("3", "🔙 Back")])
+            menu_box([("1", "✏️ Edit Profile"), ("2", "💳 Adjust Wallet"), ("3", "🗑️ Delete User"), ("4", "🔙 Back")])
             action = input(f"{C.CYAN}Choose action: {C.RESET}").strip()
             if action == "1":
                 print(f"\n{C.GREY}Edit account details. Press Enter to keep the current value.{C.RESET}")
                 name = input(f"Name [{user_data.get('name', '')}]: ").strip() or user_data.get("name", "")
                 try:
-                    wallet = int(input(f"Wallet [{user_data.get('wallet', 0)}]: ").strip() or user_data.get("wallet", 0))
                     points = int(input(f"Food points [{user_data.get('food_points', 0)}]: ").strip() or user_data.get("food_points", 0))
+                    wallet = user_data.get("wallet", 0)
                     success_flag, message = self.service.update_user(username, name, wallet, points)
                     success(message) if success_flag else error(message)
                     if success_flag:
-                        print(f"{C.GREY}Saved profile for {username}. Balance: {money(wallet)}{C.RESET}")
+                        print(f"{C.GREY}Saved profile for {username}. Wallet remains {money(wallet)}.{C.RESET}")
                 except ValueError:
-                    error("Wallet and food points must be numbers.")
+                    error("Food points must be a number.")
                 pause()
             elif action == "2":
+                print(f"\n{C.GREY}Use a positive amount to credit or a negative amount to debit.{C.RESET}")
+                try:
+                    amount = int(input(f"Wallet adjustment (+/-): ").strip())
+                    reason = input("Reason: ").strip()
+                    success_flag, message = self.service.adjust_user_wallet(username, amount, reason)
+                    success(message) if success_flag else error(message)
+                except ValueError:
+                    error("Wallet adjustment must be a number.")
+                pause()
+            elif action == "3":
                 confirm = input(f"Type DELETE to remove {username}: ").strip()
                 if confirm == "DELETE":
                     success_flag, message = self.service.delete_user(username)

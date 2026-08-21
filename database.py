@@ -413,11 +413,11 @@ class Database:
                     if item.get(key) != value:
                         item[key] = value
                         changed = True
-        if not data.get("demo_data_seeded"):
+        if "users" in data and not data.get("demo_data_seeded"):
             self._seed_demo_history(data)
             data["demo_data_seeded"] = True
             changed = True
-        if not data.get("customer_history_enhanced"):
+        if "users" in data and not data.get("customer_history_enhanced"):
             self._enhance_customer_history(data)
             data["customer_history_enhanced"] = True
             changed = True

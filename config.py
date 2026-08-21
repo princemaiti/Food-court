@@ -3,12 +3,15 @@ Configuration settings for Alakh Da Dhaaba
 """
 
 import os
+from pathlib import Path
 
 # File paths
-DATA_FILE = "data/food_court.json"
-LOG_FILE = "data/log.json"
-BACKUP_DIR = "backups"
-RECEIPT_DIR = "receipts"
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+DATA_FILE = DATA_DIR / "food_court.json"
+LOG_FILE = DATA_DIR / "log.json"
+BACKUP_DIR = BASE_DIR / "backups"
+RECEIPT_DIR = BASE_DIR / "receipts"
 
 # Admin credentials
 ADMIN_USERNAME = os.getenv("FOODCOURT_ADMIN_USERNAME", "admin")

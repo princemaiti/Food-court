@@ -9,6 +9,24 @@ restaurants, menus, orders, announcements, backups, and statistics.
 This is a learning project built with Python's standard library, so no extra packages are
 needed.
 
+## Quick Start
+
+Clone the project, enter its folder, and start the application:
+
+```bash
+git clone https://github.com/princemaiti/Food-court.git
+cd Food-court
+py main.py
+```
+
+On systems without the `py` command, use:
+
+```bash
+python main.py
+```
+
+The first run creates the local JSON database automatically.
+
 ## What You Can Do
 
 ### As a customer

@@ -78,10 +78,6 @@ These accounts are already available:
 | --- | --- |
 | `prince` | `2007` |
 | `winkle` | `2711` |
-| `riya_sharma` | `demo1234` |
-| `arjun_mehta` | `demo1234` |
-| `neha_kapoor` | `demo1234` |
-| `kabir_singh` | `demo1234` |
 
 Admin login:
 
@@ -102,9 +98,6 @@ py main.py
 
 - `SAVE10` - 10% off
 - `FLAT50` - ₹50 off
-- `WELCOME20` - 20% off your first order
-- `FEAST100` - ₹100 off orders above ₹700
-- `WEEKEND15` - 15% off
 
 Each coupon can be used once per customer.
 
